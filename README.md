@@ -104,6 +104,7 @@ The mod starts programs only to open files and links, copy commands, match your 
 - The environment variables `OS`, `WSL_DISTRO_NAME`, `HOME` and `USERPROFILE`, to know the platform, name your WSL distribution on the card, and expand `~` in a file path.
 - Claude's replies in the main conversation, to find handoff blocks. Replies from subagents are skipped.
 - A file's type and whether it exists, only when you click Open on it.
+- Its own `plugin.json`, for its version number, so it can tell when it has been updated.
 
 The mod reads no passwords, keys, tokens or other credentials.
 
@@ -116,7 +117,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 
 ### Hooks
 
-- `session.start` registers `/handoffs`, brings back a resumed session's cards, and starts the light or dark check.
+- `session.start` registers `/handoffs`, brings back a resumed session's cards, notes the version for the update note, and starts the light or dark check.
 - `command.run` for `/handoffs` opens the pane.
 - `config.set` for the theme lets the change through unaltered, then redraws the pane in the new colours.
 - `prompt.compose` adds the handoff format section described above. It changes nothing else in the instructions.
@@ -129,6 +130,8 @@ The mod reads no passwords, keys, tokens or other credentials.
 ### Storage
 
 Cards are saved in Claude Code's plugin store on your machine, per session, and deleted after 14 days.
+
+The store also keeps the version of Handoffs you last ran, and whether you've put away the auto-update tip and the note on what changed.
 
 ### What it sends
 

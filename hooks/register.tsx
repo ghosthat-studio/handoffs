@@ -293,6 +293,44 @@ const deliveryNote = () =>
     : delivery === 'message' ? 'Claude got the handoff format with your first message.'
     : isTurnDone ? '' : 'Claude gets the handoff format with your first message.'
 
+// Told once, then put away with Got it: what changed when the mod updates, and how to get updates without asking.
+const NOTES = 'notes'
+type Notes = { version?: string; unread?: string; isTipDone?: boolean }
+const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
+const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
+const WHATS_NEW: Record<string, string> = {
+  '1.0.3': 'Claude now writes cards in sessions that start with their own system prompt, and the pane tells you when Claude can’t make cards or Claude Code needs updating.',
+}
+let notes: Notes = {}
+
+const ownVersion = async ($: Engine) => {
+  const text = await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`).catch(() => undefined)
+  try {
+    const version = (JSON.parse(text ?? '{}') as { version?: unknown }).version
+    return typeof version === 'string' ? version : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// A version this store has not seen is an update when an earlier one ran here: one the notes name, or, before
+// there were notes, one that saved cards.
+async function noteVersion($: Engine) {
+  notes = ((await $.store.get(NOTES)) ?? {}) as Notes
+  const version = await ownVersion($)
+  if (version === undefined || version === notes.version) return
+  const hasRun = notes.version !== undefined || Object.keys(((await $.store.get(SAVED)) ?? {}) as Saved).length > 0
+  notes = { ...notes, version, unread: hasRun ? version : notes.unread }
+  await $.store.set(NOTES, notes)
+  if (hasRun) $.ui.toast(`Handoffs updated to ${version}. Type /handoffs to see what changed.`)
+}
+
+async function putAway($: Engine, change: Notes) {
+  notes = { ...notes, ...change }
+  await $.store.set(NOTES, notes)
+  $.ui.invalidate('ui.render')
+}
+
 const formatText = async ($: Engine) => FORMAT + shellNote(await where($), await distroOf($))
 type Face = { mono?: boolean; size?: 'caption' | 'footnote' | 'body' | 'heading' | 'title'; weight?: 'regular' | 'medium' | 'semibold' | 'bold' }
 const face = (f: Face): Face | { bold?: boolean } =>
@@ -515,6 +553,7 @@ export const register: Register = on => {
     isRich = atLeast(base ?? version, MIN_VERSION)
     olderThanSupported = isRich ? undefined : base ?? version
     if (olderThanSupported !== undefined) $.ui.toast(notices()[0] ?? '')
+    await noteVersion($).catch(() => undefined)
     // A resumed session gets its cards back.
     if ((await read($, items)).length === 0) {
       const mine = (((await $.store.get(SAVED)) ?? {}) as Saved)[await $.session.id()]
@@ -542,7 +581,8 @@ export const register: Register = on => {
     const open = (await read($, items)).filter(card => card.status === 'open').length
     const opened = open === 0 ? 'Handoffs pane opened. Nothing is waiting on you.' : `Handoffs pane opened: ${open} waiting on you.`
 
-    const said = [opened, ...(e.presentation?.isFullscreen === false ? [FULLSCREEN_HINT] : []), ...notices(), deliveryNote()]
+    const news = notes.unread === undefined ? [] : [`Handoffs updated to ${notes.unread}.`, WHATS_NEW[notes.unread] ?? '', `What changed: ${CHANGELOG}`]
+    const said = [opened, ...(e.presentation?.isFullscreen === false ? [FULLSCREEN_HINT] : []), ...notices(), deliveryNote(), ...news]
 
     return { text: said.filter(line => line !== '').join(' ') }
   })
@@ -825,6 +865,19 @@ export const register: Register = on => {
             )}
             {e.surface === 'terminal' && e.viewport?.isFullscreen === false && <Text color={DIM_INK}>{FULLSCREEN_HINT}</Text>}
             {notices().map(notice => <Text key={notice} color={INK} {...face({ weight: 'semibold' })}>{notice}</Text>)}
+            {notes.unread !== undefined && (
+              <Box key="news" flexDirection="column">
+                <Text color={INK} {...face({ weight: 'semibold' })}>Handoffs updated to {notes.unread}.</Text>
+                <Text color={INK}>{`${WHATS_NEW[notes.unread] ?? ''} What changed: ${CHANGELOG}`.trim()}</Text>
+                <Button key="news-done" plain dimColor label="Got it" onPress={() => void putAway($, { unread: undefined })} />
+              </Box>
+            )}
+            {notes.isTipDone !== true && (
+              <Box key="tip" flexDirection="column">
+                <Text color={INK}>{TIP}</Text>
+                <Button key="tip-done" plain dimColor label="Got it" onPress={() => void putAway($, { isTipDone: true })} />
+              </Box>
+            )}
           </Box>
         </Box>
 

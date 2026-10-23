@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 (2026-10-23)
+
+- The pane shows a one-time tip on turning on auto-update, so new versions arrive without you asking. Got it puts it away.
+- After an update, the pane and `/handoffs` say what changed, once, with a link to this changelog.
+
 ## 1.0.2 (2026-10-23)
 
 - If Claude never gets the handoff format in a session, the pane says so and points to Troubleshooting, instead of quietly showing "Nothing waiting on you".

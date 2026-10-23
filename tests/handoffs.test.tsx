@@ -496,3 +496,53 @@ test('an older Claude Code than handoffs supports says to update', async ($, on)
   const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
   expect(ran.text).toMatch(/needs Claude Code 2\.1\.299 or later/)
 })
+
+// The mod's own plugin.json, at the version a test installs.
+const installed = (on: On, version: string) =>
+  on('fs.read', ($, e) => (e.path.endsWith('/.claude-plugin/plugin.json') ? { value: JSON.stringify({ name: 'handoffs', version }) } : undefined as never))
+
+test('a new install shows the auto-update tip until Got it, and no update note', async ($, on) => {
+  engine(on)
+  installed(on, '1.0.3')
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /Enable auto-update/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /Handoffs updated to/ })).toBeUndefined()
+  await pane.press({ key: 'tip-done' })
+  expect(await pane.find({ type: 'Text', text: /Enable auto-update/ })).toBeUndefined()
+  // Put away for good: the next session doesn't bring it back.
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const again = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE, requestId: 'handoffs-again' })
+  expect(await again.find({ type: 'Text', text: /Enable auto-update/ })).toBeUndefined()
+})
+
+test('updating from a version before the notes says what changed, once', async ($, on) => {
+  // 1.0.2 kept no notes, but saved a session's cards.
+  engine(on, '2.1.299', { sessions: { s0: { items: [], seq: 3, at: Date.parse('2026-10-14T20:00:00Z') } } })
+  installed(on, '1.0.3')
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /Handoffs updated to 1\.0\.3/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /own system prompt.*CHANGELOG\.md/ })).toBeDefined()
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/Handoffs updated to 1\.0\.3/)
+  await pane.press({ key: 'news-done' })
+  expect(await pane.find({ type: 'Text', text: /Handoffs updated to/ })).toBeUndefined()
+
+  // The next session on the same version says nothing more.
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const again = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE, requestId: 'handoffs-again' })
+  expect(await again.find({ type: 'Text', text: /Handoffs updated to/ })).toBeUndefined()
+})
+
+test('a later update without its own note points to the changelog, and keeps a dismissed tip away', async ($, on) => {
+  engine(on, '2.1.299', { notes: { version: '1.0.3', isTipDone: true } })
+  installed(on, '1.0.4')
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /Handoffs updated to 1\.0\.4/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /^What changed: https:\/\/github\.com\/ghosthat-studio\/handoffs\/blob\/main\/CHANGELOG\.md$/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /Enable auto-update/ })).toBeUndefined()
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/Handoffs updated to 1\.0\.4\. What changed:/)
+})
