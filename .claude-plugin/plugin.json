@@ -1,0 +1,18 @@
+{
+  "name": "handoffs",
+  "displayName": "Handoffs",
+  "version": "1.0.0",
+  "description": "Turns Claude's requests to you into checklist cards in a Handoffs pane, with steps to tick, decision buttons, and Open and Copy buttons, so nothing Claude is waiting on gets lost in the scrollback.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Ghost Hat Studio"
+  },
+  "homepage": "https://ghosthatstudio.com/toolbox/handoffs/",
+  "repository": "https://github.com/ghosthat-studio/handoffs",
+  "documentationUrl": "https://github.com/ghosthat-studio/handoffs#readme",
+  "supportUrl": "https://github.com/ghosthat-studio/handoffs/issues",
+  "privacyPolicyUrl": "https://ghosthatstudio.com/privacy/",
+  "termsOfServiceUrl": "https://ghosthatstudio.com/terms/",
+  "license": "MIT",
+  "keywords": ["mod", "handoffs", "checklist", "workflow", "ui"]
+}
