@@ -274,8 +274,24 @@ async function where($: Engine): Promise<Platform> {
 // Builds before 2.1.299 refuse a tree whose Text names a face; there the heavy faces fall back to bold.
 let isRich = false
 
-// Whether the engine composed this process's system prompt; when it hasn't, the format goes with the first message.
-let isComposed = false
+// How the format reached Claude: in the system prompt the engine composed, or, when it composed none, with the first
+// message. A turn that ends with neither means it never did, and the pane and /handoffs say so.
+let delivery: 'system' | 'message' | undefined
+let isTurnDone = false
+
+// Builds before this one lack the hooks the mod is built on.
+const MIN_VERSION = [2, 1, 299]
+let olderThanSupported: string | undefined
+
+const README = 'https://github.com/ghosthat-studio/handoffs#troubleshooting'
+const notices = () => [
+  ...(olderThanSupported === undefined ? [] : [`Handoffs needs Claude Code ${MIN_VERSION.join('.')} or later, and this is ${olderThanSupported}. Run claude update in your terminal.`]),
+  ...(delivery === undefined && isTurnDone ? [`Claude hasn't been given the handoff format in this session, so it won't make cards. See ${README}`] : []),
+]
+const deliveryNote = () =>
+  delivery === 'system' ? 'Claude has the handoff format in its instructions.'
+    : delivery === 'message' ? 'Claude got the handoff format with your first message.'
+    : isTurnDone ? '' : 'Claude gets the handoff format with your first message.'
 
 const formatText = async ($: Engine) => FORMAT + shellNote(await where($), await distroOf($))
 type Face = { mono?: boolean; size?: 'caption' | 'footnote' | 'body' | 'heading' | 'title'; weight?: 'regular' | 'medium' | 'semibold' | 'bold' }
@@ -496,7 +512,9 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'handoffs', description: 'Open the Handoffs pane: what Claude is waiting on you for' })
     const { base, version } = await $.session.version()
-    isRich = atLeast(base ?? version, [2, 1, 299])
+    isRich = atLeast(base ?? version, MIN_VERSION)
+    olderThanSupported = isRich ? undefined : base ?? version
+    if (olderThanSupported !== undefined) $.ui.toast(notices()[0] ?? '')
     // A resumed session gets its cards back.
     if ((await read($, items)).length === 0) {
       const mine = (((await $.store.get(SAVED)) ?? {}) as Saved)[await $.session.id()]
@@ -524,7 +542,9 @@ export const register: Register = on => {
     const open = (await read($, items)).filter(card => card.status === 'open').length
     const opened = open === 0 ? 'Handoffs pane opened. Nothing is waiting on you.' : `Handoffs pane opened: ${open} waiting on you.`
 
-    return { text: e.presentation?.isFullscreen === false ? `${opened} ${FULLSCREEN_HINT}` : opened }
+    const said = [opened, ...(e.presentation?.isFullscreen === false ? [FULLSCREEN_HINT] : []), ...notices(), deliveryNote()]
+
+    return { text: said.filter(line => line !== '').join(' ') }
   })
 
   // A theme change repaints Claude Code's own ground at once; the pane and band draw again with it, so their accents
@@ -539,18 +559,28 @@ export const register: Register = on => {
   // Teaches the block format.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    isComposed = true
+    const sections = [...composed.sections, { id: 'handoffs:format', text: await formatText($), scope: 'session' as const }]
+    // Marked only once the section is written, so a failure here leaves the first-message fallback to send it.
+    if (delivery !== 'system') {
+      // A slash command before the first message has the context built first; ask for it again, now without the copy.
+      if (delivery === 'message') $.ui.invalidate('prompt.context')
+      delivery = 'system'
+      $.ui.invalidate('ui.render')
+    }
 
-    return { ...composed, sections: [...composed.sections, { id: 'handoffs:format', text: await formatText($), scope: 'session' }] }
-  })
+    return { ...composed, sections }
+  }).catch(($, e, next) => next(e))
 
   // A host that brings its own system prompt (`--system-prompt`, or an SDK host replacing it) composes none, so
   // prompt.compose never fires; the format then rides the first message's context instead.
   on('prompt.context', async ($, e, next) => {
     const context = await next(e)
-    if (isComposed) return context
+    if (delivery === 'system') return context
+    const blocks = [...context.blocks, { name: 'handoffs', text: await formatText($) }]
+    delivery = 'message'
+    $.ui.invalidate('ui.render')
 
-    return { ...context, blocks: [...context.blocks, { name: 'handoffs', text: await formatText($) }] }
+    return { ...context, blocks }
   })
 
   // Reads handoff blocks from every main-loop reply message as it is kept, not only the turn's last text:
@@ -570,6 +600,10 @@ export const register: Register = on => {
   // And the turn's final answer, for hosts that keep no rows; a block already read is skipped.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined && e.reason === 'answer') await take($, e.answer)
+    if (e.agentId === undefined && !isTurnDone) {
+      isTurnDone = true
+      if (delivery === undefined) $.ui.invalidate('ui.render')
+    }
 
     return next(e)
   })
@@ -790,6 +824,7 @@ export const register: Register = on => {
               <Text color={INK}>When Claude needs you to do or decide something, it lands here as a card.</Text>
             )}
             {e.surface === 'terminal' && e.viewport?.isFullscreen === false && <Text color={DIM_INK}>{FULLSCREEN_HINT}</Text>}
+            {notices().map(notice => <Text key={notice} color={INK} {...face({ weight: 'semibold' })}>{notice}</Text>)}
           </Box>
         </Box>
 

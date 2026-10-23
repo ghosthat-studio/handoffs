@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 (2026-10-23)
+
+- If Claude never gets the handoff format in a session, the pane says so and points to Troubleshooting, instead of quietly showing "Nothing waiting on you".
+- On a Claude Code older than 2.1.299, the pane and a notice at startup say to run `claude update`.
+- `/handoffs` says how Claude got the format: in its instructions, or with your first message.
+- If writing the format into Claude's instructions fails, it goes with your first message instead.
+- The README says how to turn on auto-update, so new versions arrive on their own.
+
 ## 1.0.1 (2026-10-23)
 
 - Claude now learns the handoff format in sessions that start with their own system prompt, such as `--system-prompt`, a custom agent, or an app built on the Agent SDK. Before, the pane appeared but Claude never wrote cards. In those sessions the format goes along with your first message instead.

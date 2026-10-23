@@ -26,6 +26,13 @@ In Claude Code:
 
 Then run `/reload-plugins`, or start a new session.
 
+To get new versions automatically, turn on auto-update for the marketplace: run `/plugin`, open **Marketplaces**, pick **ghosthat-studio**, and choose **Enable auto-update**. Claude Code then fetches updates in the background and tells you when one is ready for `/reload-plugins`. Without it, update by hand:
+
+```
+/plugin marketplace update ghosthat-studio
+/plugin update handoffs@ghosthat-studio
+```
+
 ## Compatibility
 
 - Mac
@@ -134,6 +141,12 @@ On Windows, you're probably in the older console window rather than Windows Term
 
 **The pane covers the conversation instead of sitting beside it.**
 Claude Code isn't in fullscreen mode. Type `/tui fullscreen`.
+
+**The pane says "Handoffs needs Claude Code 2.1.299 or later".**
+Your Claude Code is older than the mod supports. Run `claude update` in your terminal, then start a new session.
+
+**The pane says "Claude hasn't been given the handoff format in this session".**
+The pane is working, but the instructions that teach Claude to write cards didn't reach it, so Claude won't make any. Update to the latest Handoffs and start a new session. If the pane still says so, another plugin may be changing Claude's instructions: run `/plugin`, and send the list of plugins you have enabled to [the issues page](https://github.com/ghosthat-studio/handoffs/issues). `/handoffs` also says how Claude got the format.
 
 **Claude's replies don't turn into cards, or `/handoffs` isn't there.**
 Run `/plugin` and check that handoffs is installed and enabled, then `/reload-plugins` or start a new session. If you started Claude Code with a folder of its own plugins (`--plugin-dir`), check the path: a typo there quietly starts Claude Code without the mod.

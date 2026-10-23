@@ -456,3 +456,43 @@ test('a session started with its own system prompt still learns the handoff form
   expect(block?.text).toContain('```handoff')
   expect(context.blocks[0].name).toBe('currentDate')
 })
+
+const COMPOSE = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [], sections: [] } as const
+
+test('the format still reaches Claude when the platform checks fail', async ($, on) => {
+  engine(on)
+  on('env.get', () => { throw new Error('no environment here') })
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const composed = await $.prompt.compose(COMPOSE)
+  const context = await $.prompt.context({ blocks: [] } as never)
+  const delivered = [...composed.sections.map(s => s.text), ...context.blocks.map(b => b.text)]
+  expect(delivered.filter(text => text.includes('```handoff')).length).toBe(1)
+})
+
+test('the pane and /handoffs say how Claude got the format, and say so when it never did', async ($, on) => {
+  engine(on)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  // A turn ends with neither prompt hook having run: the format never reached Claude.
+  await $.turn.complete(finish('Done.'))
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /hasn't been given the handoff format/ })).toBeDefined()
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/hasn't been given the handoff format/)
+
+  await $.prompt.compose(COMPOSE)
+  const ok = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ok.text).toMatch(/Claude has the handoff format in its instructions/)
+  const healthy = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE, requestId: 'handoffs-again' })
+  expect(await healthy.find({ type: 'Text', text: /hasn't been given/ })).toBeUndefined()
+})
+
+test('an older Claude Code than handoffs supports says to update', async ($, on) => {
+  engine(on, '2.1.250')
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /needs Claude Code 2\.1\.299 or later.*claude update/ })).toBeDefined()
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/needs Claude Code 2\.1\.299 or later/)
+})
