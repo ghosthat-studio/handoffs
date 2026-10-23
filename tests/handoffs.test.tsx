@@ -435,3 +435,24 @@ test('outside fullscreen the pane says how to give it a column, and in fullscree
   expect(await docked.find({ type: 'Text', text: /\/tui fullscreen/ })).toBeUndefined()
   await docked.unmount()
 })
+
+test('the handoff format reaches Claude in the system prompt, or with the first message when the host brings its own prompt', async ($, on) => {
+  engine(on)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const composed = await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [], sections: [] })
+  expect(composed.sections.map(s => s.id)).toContain('handoffs:format')
+  const context = await $.prompt.context({ blocks: [] } as never)
+  expect(context.blocks.map(b => b.name)).not.toContain('handoffs')
+})
+
+test('a session started with its own system prompt still learns the handoff format', async ($, on) => {
+  engine(on)
+  on('prompt.context', ($, e) => ({ blocks: e.blocks }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  // `--system-prompt` and SDK hosts that replace the prompt: the engine composes no prompt, so prompt.compose never fires.
+  const context = await $.prompt.context({ blocks: [{ name: 'currentDate', text: 'Today' }] } as never)
+  const block = context.blocks.find(b => b.name === 'handoffs')
+  expect(block?.text).toContain('```handoff')
+  expect(context.blocks[0].name).toBe('currentDate')
+})

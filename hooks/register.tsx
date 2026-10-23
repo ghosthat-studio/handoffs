@@ -273,6 +273,11 @@ async function where($: Engine): Promise<Platform> {
 
 // Builds before 2.1.299 refuse a tree whose Text names a face; there the heavy faces fall back to bold.
 let isRich = false
+
+// Whether the engine composed this process's system prompt; when it hasn't, the format goes with the first message.
+let isComposed = false
+
+const formatText = async ($: Engine) => FORMAT + shellNote(await where($), await distroOf($))
 type Face = { mono?: boolean; size?: 'caption' | 'footnote' | 'body' | 'heading' | 'title'; weight?: 'regular' | 'medium' | 'semibold' | 'bold' }
 const face = (f: Face): Face | { bold?: boolean } =>
   isRich ? f : f.weight === 'semibold' || f.weight === 'bold' || f.size === 'title' || f.size === 'heading' ? { bold: true } : {}
@@ -534,9 +539,18 @@ export const register: Register = on => {
   // Teaches the block format.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    const text = FORMAT + shellNote(await where($), await distroOf($))
+    isComposed = true
 
-    return { ...composed, sections: [...composed.sections, { id: 'handoffs:format', text, scope: 'session' }] }
+    return { ...composed, sections: [...composed.sections, { id: 'handoffs:format', text: await formatText($), scope: 'session' }] }
+  })
+
+  // A host that brings its own system prompt (`--system-prompt`, or an SDK host replacing it) composes none, so
+  // prompt.compose never fires; the format then rides the first message's context instead.
+  on('prompt.context', async ($, e, next) => {
+    const context = await next(e)
+    if (isComposed) return context
+
+    return { ...context, blocks: [...context.blocks, { name: 'handoffs', text: await formatText($) }] }
   })
 
   // Reads handoff blocks from every main-loop reply message as it is kept, not only the turn's last text:

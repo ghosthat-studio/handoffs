@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 (2026-10-23)
+
+- Claude now learns the handoff format in sessions that start with their own system prompt, such as `--system-prompt`, a custom agent, or an app built on the Agent SDK. Before, the pane appeared but Claude never wrote cards. In those sessions the format goes along with your first message instead.
+
 ## 1.0.0 (2026-10-21)
 
 First public release.

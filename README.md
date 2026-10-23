@@ -102,7 +102,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 
 ### What it adds to Claude's prompts
 
-- **The handoff format.** Each session's instructions to Claude gain a short section that teaches the `handoff` block: the fields, one card per topic, and how to close a card. On Windows and WSL it adds a note on which shell to write commands for.
+- **The handoff format.** Each session's instructions to Claude gain a short section that teaches the `handoff` block: the fields, one card per topic, and how to close a card. On Windows and WSL it adds a note on which shell to write commands for. When a session starts with its own system prompt (`--system-prompt`, a custom agent, or an app built on the Agent SDK), the same section goes along with your first message instead.
 - **Your open cards, with each message you send.** Each card's id, title, what it needs, its steps and its decision go along with your message, so Claude updates a topic's card instead of starting a new one. Any ticks or picks you made without sending go along too. Messages from scheduled tasks, other sessions and background notifications get nothing added.
 - **Your open cards after a compaction.** The same cards go back into the conversation after the summary, with their files to review, links and commands.
 - **What you send from a card.** Send to Claude and Mark done submit one message in your name: the card's id and title, the steps you ticked, the option you picked, and whether it's done.
@@ -113,6 +113,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 - `command.run` for `/handoffs` opens the pane.
 - `config.set` for the theme lets the change through unaltered, then redraws the pane in the new colours.
 - `prompt.compose` adds the handoff format section described above. It changes nothing else in the instructions.
+- `prompt.context` adds the same section to your first message, only in sessions where Claude Code composes no system prompt of its own. It changes nothing else in the message.
 - `session.append` and `turn.complete` read handoff blocks from Claude's replies. They change nothing in the conversation.
 - `prompt.submit` adds your open and changed cards to your message, as described above. It changes nothing else in the message.
 - `session.compact` adds your open cards after the summary.
