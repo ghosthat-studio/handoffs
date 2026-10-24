@@ -477,15 +477,72 @@ test('the pane and /handoffs say how Claude got the format, and say so when it n
   // A turn ends with neither prompt hook having run: the format never reached Claude.
   await $.turn.complete(finish('Done.'))
   const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
-  expect(await pane.find({ type: 'Text', text: /hasn't been given the handoff format/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /hasn't been given the handoff format yet.*with your next message/ })).toBeDefined()
   const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
-  expect(ran.text).toMatch(/hasn't been given the handoff format/)
+  expect(ran.text).toMatch(/hasn't been given the handoff format yet/)
 
   await $.prompt.compose(COMPOSE)
   const ok = await $.command.run({ command: 'handoffs', args: '' } as never)
   expect(ok.text).toMatch(/Claude has the handoff format in its instructions/)
   const healthy = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE, requestId: 'handoffs-again' })
   expect(await healthy.find({ type: 'Text', text: /hasn't been given/ })).toBeUndefined()
+})
+
+// A message the person typed at the prompt, and the context it went with.
+const typed = async ($: Parameters<Parameters<typeof test>[1]>[0], text: string, sent: (readonly string[] | undefined)[]) => {
+  await $.prompt.submit({ text, origin: { kind: 'composer' } } as never)
+  return sent.at(-1) ?? []
+}
+
+test('when another plugin skips both prompt hooks, the format goes with the next message, and with the first one from then on', async ($, on) => {
+  engine(on)
+  const sent: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.context)
+    return { text: e.text }
+  })
+  const hasFormat = (context: readonly string[]) => context.some(text => text.includes('```handoff'))
+  const hasReminder = (context: readonly string[]) => context.some(text => text.startsWith('Handoffs: when your reply ends'))
+
+  // Claude Code's sec-default passes prompt.compose and prompt.context over: neither runs in this session.
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  expect(hasFormat(await typed($, 'Fix the tests', sent))).toBe(false)
+  await $.turn.complete(finish('Two tests fail. Want me to look at the fix?'))
+  const told = await typed($, 'yes', sent)
+  expect(hasFormat(told)).toBe(true)
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/another plugin skips/)
+  // After that, only the short reminder, which outlasts a compaction.
+  const later = await typed($, 'and the other one', sent)
+  expect(hasFormat(later)).toBe(false)
+  expect(hasReminder(later)).toBe(true)
+
+  // The next session on this machine sends the format with its very first message.
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  expect(hasFormat(await typed($, 'Morning', sent))).toBe(true)
+
+  // Once nothing skips the hooks, sessions go back to the system prompt alone.
+  await $.prompt.compose(COMPOSE)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.prompt.compose(COMPOSE)
+  const plain = await typed($, 'Hello', sent)
+  expect(hasFormat(plain)).toBe(false)
+  expect(hasReminder(plain)).toBe(false)
+})
+
+test('a normal session never sends the format with a message', async ($, on) => {
+  engine(on)
+  const sent: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  // prompt.submit runs before the turn's prompt is composed, so the first message can't know yet; it waits.
+  expect(await typed($, 'Hi', sent)).toEqual([])
+  await $.prompt.compose(COMPOSE)
+  await $.turn.complete(finish('Hello.'))
+  expect(await typed($, 'Next', sent)).toEqual([])
 })
 
 test('an older Claude Code than handoffs supports says to update', async ($, on) => {
@@ -537,12 +594,12 @@ test('updating from a version before the notes says what changed, once', async (
 
 test('a later update without its own note points to the changelog, and keeps a dismissed tip away', async ($, on) => {
   engine(on, '2.1.299', { notes: { version: '1.0.3', isTipDone: true } })
-  installed(on, '1.0.4')
+  installed(on, '1.0.5')
   await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
   const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
-  expect(await pane.find({ type: 'Text', text: /Handoffs updated to 1\.0\.4/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /Handoffs updated to 1\.0\.5/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /^What changed: https:\/\/github\.com\/ghosthat-studio\/handoffs\/blob\/main\/CHANGELOG\.md$/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /Enable auto-update/ })).toBeUndefined()
   const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
-  expect(ran.text).toMatch(/Handoffs updated to 1\.0\.4\. What changed:/)
+  expect(ran.text).toMatch(/Handoffs updated to 1\.0\.5\. What changed:/)
 })

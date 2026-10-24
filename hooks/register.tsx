@@ -84,7 +84,11 @@ Cards are numbered h1, h2, ... When the person sends a card back you get a messa
 
 Keep one card per topic. Your context lists the cards still open; check that list before you write a block. When a request belongs to a topic that already has an open card, rewrite that card with its id rather than starting a new one, folding in what changed and dropping steps that no longer apply. When a new card takes over from older ones, or the plan has moved on, close the cards it replaces in the same reply. Requests on separate topics get separate cards, and two cards never share a step.
 
-Do not use a handoff block for anything you can do yourself, or for a question you are only asking in passing.`
+A reply that ends by asking whether to go ahead, or which way to go, is waiting on the person: end it with a card. Do not use a handoff block for anything you can do yourself, or for an aside that needs no answer.`
+
+// The format's gist, with each later message when the format itself went with a message: it keeps its weight
+// there, and it outlasts a compaction that drops the message the format came with.
+const REMINDER = 'Handoffs: when your reply ends waiting on the person to do or decide something, including asking whether to go ahead, end it with a `handoff` block (title, need, why, step, decide, review, link and run lines; `id: h2` to rewrite an open card, `close: h2` to close one).'
 
 type Parsed = {
   id?: string
@@ -275,8 +279,10 @@ async function where($: Engine): Promise<Platform> {
 let isRich = false
 
 // How the format reached Claude: in the system prompt the engine composed, or, when it composed none, with the first
-// message. A turn that ends with neither means it never did, and the pane and /handoffs say so.
-let delivery: 'system' | 'message' | undefined
+// message's context. A plugin seated over this one (Claude Code's own sec-default on managed, Team and Enterprise
+// machines) can pass both prompt hooks over; then it goes with a message the person sends (`submit`): from the next
+// one in the session that finds out, and from the first in every session after, since the store remembers.
+let delivery: 'system' | 'message' | 'submit' | undefined
 let isTurnDone = false
 
 // Builds before this one lack the hooks the mod is built on.
@@ -286,19 +292,22 @@ let olderThanSupported: string | undefined
 const README = 'https://github.com/ghosthat-studio/handoffs#troubleshooting'
 const notices = () => [
   ...(olderThanSupported === undefined ? [] : [`Handoffs needs Claude Code ${MIN_VERSION.join('.')} or later, and this is ${olderThanSupported}. Run claude update in your terminal.`]),
-  ...(delivery === undefined && isTurnDone ? [`Claude hasn't been given the handoff format in this session, so it won't make cards. See ${README}`] : []),
+  ...(delivery === undefined && isTurnDone ? [`Claude hasn't been given the handoff format yet: another plugin skipped the way Handoffs gives it. Claude gets it with your next message instead. See ${README}`] : []),
 ]
 const deliveryNote = () =>
   delivery === 'system' ? 'Claude has the handoff format in its instructions.'
     : delivery === 'message' ? 'Claude got the handoff format with your first message.'
+    : delivery === 'submit' ? 'Claude got the handoff format with one of your messages, and a reminder goes with each one after, because another plugin skips the way Handoffs usually gives it.'
     : isTurnDone ? '' : 'Claude gets the handoff format with your first message.'
 
 // Told once, then put away with Got it: what changed when the mod updates, and how to get updates without asking.
 const NOTES = 'notes'
-type Notes = { version?: string; unread?: string; isTipDone?: boolean }
+// isSkipped: a session here ended a turn with the format never given, so the next ones send it with the first message.
+type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped?: boolean }
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.0.4': 'Handoffs now works on Team and Enterprise machines, where Claude Code’s own security plugin skipped the way Handoffs teaches Claude the format. Claude is also told plainly that a reply asking whether to go ahead needs a card.',
   '1.0.3': 'Claude now writes cards in sessions that start with their own system prompt, and the pane tells you when Claude can’t make cards or Claude Code needs updating.',
 }
 let notes: Notes = {}
@@ -554,6 +563,11 @@ export const register: Register = on => {
     olderThanSupported = isRich ? undefined : base ?? version
     if (olderThanSupported !== undefined) $.ui.toast(notices()[0] ?? '')
     await noteVersion($).catch(() => undefined)
+    // A new conversation never saw the message the format went with.
+    if (delivery === 'submit' && (e.source === 'startup' || e.source === 'clear')) {
+      delivery = undefined
+      isTurnDone = false
+    }
     // A resumed session gets its cards back.
     if ((await read($, items)).length === 0) {
       const mine = (((await $.store.get(SAVED)) ?? {}) as Saved)[await $.session.id()]
@@ -607,6 +621,8 @@ export const register: Register = on => {
       delivery = 'system'
       $.ui.invalidate('ui.render')
     }
+    // Nothing skips it any more: later sessions stop sending the format with their first message.
+    if (notes.isSkipped === true) await putAway($, { isSkipped: undefined })
 
     return { ...composed, sections }
   }).catch(($, e, next) => next(e))
@@ -619,6 +635,7 @@ export const register: Register = on => {
     const blocks = [...context.blocks, { name: 'handoffs', text: await formatText($) }]
     delivery = 'message'
     $.ui.invalidate('ui.render')
+    if (notes.isSkipped === true) await putAway($, { isSkipped: undefined })
 
     return { ...context, blocks }
   })
@@ -642,7 +659,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.reason === 'answer') await take($, e.answer)
     if (e.agentId === undefined && !isTurnDone) {
       isTurnDone = true
-      if (delivery === undefined) $.ui.invalidate('ui.render')
+      // Both prompt hooks were passed over: the person's next message carries the format, here and from now on.
+      if (delivery === undefined) await putAway($, { isSkipped: true }).catch(() => $.ui.invalidate('ui.render'))
     }
 
     return next(e)
@@ -657,18 +675,23 @@ export const register: Register = on => {
     if (!isPersons || e.command !== undefined || e.isMeta === true) return next(e)
     const list = await read($, items)
     const dirty = list.filter(card => card.isDirty)
-    const notes: string[] = []
+    const told: string[] = []
+    if (delivery === undefined && (isTurnDone || notes.isSkipped === true)) {
+      told.push(await formatText($))
+      delivery = 'submit'
+      $.ui.invalidate('ui.render')
+    } else if (delivery === 'submit') told.push(REMINDER)
     if (dirty.length > 0) {
       await update($, items, cards => cards.map(card => (card.isDirty ? { ...card, isDirty: false } : card)))
       await save($)
-      notes.push(`The person changed these handoff cards since you last heard:\n\n${dirty.map(card => report(card, 'progress')).join('\n\n')}`)
+      told.push(`The person changed these handoff cards since you last heard:\n\n${dirty.map(card => report(card, 'progress')).join('\n\n')}`)
     }
     // Every message carries the open cards, so a new request updates its topic's card instead of adding one.
     const open = list.filter(card => card.status === 'open' && !card.isDirty)
-    if (open.length > 0) notes.push(openList(open))
-    if (notes.length === 0) return next(e)
+    if (open.length > 0) told.push(openList(open))
+    if (told.length === 0) return next(e)
 
-    return next({ ...e, context: [...(e.context ?? []), ...notes] })
+    return next({ ...e, context: [...(e.context ?? []), ...told] })
   }).catch(($, e, next) => next(e))
 
   // A compaction keeps every open request: the cards go back in after the summary.

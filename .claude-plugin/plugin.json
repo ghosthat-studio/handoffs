@@ -1,7 +1,7 @@
 {
   "name": "handoffs",
   "displayName": "Handoffs",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Turns Claude's requests to you into checklist cards in a Handoffs pane, with steps to tick, decision buttons, and Open and Copy buttons, so nothing Claude is waiting on gets lost in the scrollback.",
   "types": "./types/index.d.ts",
   "author": {

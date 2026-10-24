@@ -110,7 +110,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 
 ### What it adds to Claude's prompts
 
-- **The handoff format.** Each session's instructions to Claude gain a short section that teaches the `handoff` block: the fields, one card per topic, and how to close a card. On Windows and WSL it adds a note on which shell to write commands for. When a session starts with its own system prompt (`--system-prompt`, a custom agent, or an app built on the Agent SDK), the same section goes along with your first message instead.
+- **The handoff format.** Each session's instructions to Claude gain a short section that teaches the `handoff` block: the fields, one card per topic, and how to close a card. On Windows and WSL it adds a note on which shell to write commands for. When a session starts with its own system prompt (`--system-prompt`, a custom agent, or an app built on the Agent SDK), the same section goes along with your first message instead. Where another plugin skips both of those (Claude Code's own security plugin does on Team and Enterprise plans and machines with managed settings), the section goes with your next message, and with your first message in later sessions, followed by a one-line reminder with each message after it.
 - **Your open cards, with each message you send.** Each card's id, title, what it needs, its steps and its decision go along with your message, so Claude updates a topic's card instead of starting a new one. Any ticks or picks you made without sending go along too. Messages from scheduled tasks, other sessions and background notifications get nothing added.
 - **Your open cards after a compaction.** The same cards go back into the conversation after the summary, with their files to review, links and commands.
 - **What you send from a card.** Send to Claude and Mark done submit one message in your name: the card's id and title, the steps you ticked, the option you picked, and whether it's done.
@@ -123,7 +123,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 - `prompt.compose` adds the handoff format section described above. It changes nothing else in the instructions.
 - `prompt.context` adds the same section to your first message, only in sessions where Claude Code composes no system prompt of its own. It changes nothing else in the message.
 - `session.append` and `turn.complete` read handoff blocks from Claude's replies. They change nothing in the conversation.
-- `prompt.submit` adds your open and changed cards to your message, as described above. It changes nothing else in the message.
+- `prompt.submit` adds your open and changed cards to your message, and the handoff format or its reminder where another plugin skipped the hooks above. It changes nothing else in the message.
 - `session.compact` adds your open cards after the summary.
 - `ui.render` draws the pane and the Waiting on you band, and in the transcript shows each handoff block as a one-line pointer to its card. The reply Claude sees and keeps is unchanged.
 
@@ -131,7 +131,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 
 Cards are saved in Claude Code's plugin store on your machine, per session, and deleted after 14 days.
 
-The store also keeps the version of Handoffs you last ran, and whether you've put away the auto-update tip and the note on what changed.
+The store also keeps the version of Handoffs you last ran, whether you've put away the auto-update tip and the note on what changed, and whether another plugin skipped the format on this machine.
 
 ### What it sends
 
@@ -148,8 +148,8 @@ Claude Code isn't in fullscreen mode. Type `/tui fullscreen`.
 **The pane says "Handoffs needs Claude Code 2.1.299 or later".**
 Your Claude Code is older than the mod supports. Run `claude update` in your terminal, then start a new session.
 
-**The pane says "Claude hasn't been given the handoff format in this session".**
-The pane is working, but the instructions that teach Claude to write cards didn't reach it, so Claude won't make any. Update to the latest Handoffs and start a new session. If the pane still says so, another plugin may be changing Claude's instructions: run `/plugin`, and send the list of plugins you have enabled to [the issues page](https://github.com/ghosthat-studio/handoffs/issues). `/handoffs` also says how Claude got the format.
+**The pane says "Claude hasn't been given the handoff format yet".**
+Another plugin skipped the way Handoffs teaches Claude to write cards. Claude Code's own security plugin does this on Team and Enterprise plans and on machines with managed settings. Send your next message and Claude gets the format with it; later sessions on the same machine get it with the first message. If cards still don't appear, update to the latest Handoffs and start a new session. If the pane still says so after that, run `/plugin`, and send the list of plugins you have enabled to [the issues page](https://github.com/ghosthat-studio/handoffs/issues). `/handoffs` also says how Claude got the format.
 
 **Claude's replies don't turn into cards, or `/handoffs` isn't there.**
 Run `/plugin` and check that handoffs is installed and enabled, then `/reload-plugins` or start a new session. If you started Claude Code with a folder of its own plugins (`--plugin-dir`), check the path: a typo there quietly starts Claude Code without the mod.

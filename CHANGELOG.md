@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 (2026-10-24)
+
+- Handoffs now works where Claude Code's built-in security plugin (`sec-default`, on Team and Enterprise plans and machines with managed settings) skips third-party plugins' prompt hooks. Before, Claude never got the handoff format there. Now it goes with your next message, and with your first message in every session after that, plus a one-line reminder with each message after it.
+- Claude is told plainly that a reply ending with "want me to go ahead?" is waiting on you and needs a card.
+
 ## 1.0.3 (2026-10-23)
 
 - The pane shows a one-time tip on turning on auto-update, so new versions arrive without you asking. Got it puts it away.
