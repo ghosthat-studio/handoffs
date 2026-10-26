@@ -17,7 +17,7 @@ A **Waiting on you** band sits above the prompt while any card is open. When you
 
 ## Install
 
-In Claude Code:
+Type these as messages in a Claude Code session: in your terminal, or in the Code tab of the Claude Desktop app.
 
 ```
 /plugin marketplace add ghosthat-studio/marketplace
@@ -25,6 +25,8 @@ In Claude Code:
 ```
 
 Then run `/reload-plugins`, or start a new session.
+
+Don't add it on the Plugins page under Customize in Claude Desktop or claude.ai. That page is for chat and Cowork, where Handoffs can't run. See [Which plugins page to use](#which-plugins-page-to-use).
 
 To get new versions automatically, turn on auto-update for the marketplace: run `/plugin`, open **Marketplaces**, pick **ghosthat-studio**, and choose **Enable auto-update**. Claude Code then fetches updates in the background and tells you when one is ready for `/reload-plugins`. Without it, update by hand:
 
@@ -37,7 +39,7 @@ To get new versions automatically, turn on auto-update for the marketplace: run 
 
 - Mac
 - Linux. Open uses `xdg-open`, and Copy uses `wl-copy`, `xclip` or `xsel`.
-- Windows: in WSL, in the Claude Code CLI in PowerShell, and in Claude Desktop
+- Windows: in WSL, in the Claude Code CLI in PowerShell, and in the Code tab of Claude Desktop
 - Claude Code 2.1.299 or later
 
 Handoffs is a mod, so it works in Claude Code only.
@@ -137,7 +139,22 @@ The store also keeps the version of Handoffs you last ran, whether you've put aw
 
 The mod makes no network calls and sends nothing to Ghost Hat Studio. What it adds to your messages and to Claude's instructions, listed above, goes to Anthropic with the rest of the conversation, as Claude Code always does. Open hands a path or link to your own apps, and Copy puts a command on your clipboard.
 
-## Troubleshooting
+## Which plugins page to use
+
+Anthropic uses "plugin" and "marketplace" for several different places. Handoffs is a mod, a plugin that changes Claude Code's own screen, so it runs in Claude Code only.
+
+| Where | Does Handoffs run there? | How to install |
+|---|---|---|
+| Claude Code in your terminal | Yes | The commands under [Install](#install) |
+| The Code tab in Claude Desktop | Yes | The same commands, or **+** next to the prompt, then **Add plugins**, with the marketplace `ghosthat-studio/marketplace` |
+| The VS Code extension | Yes | The same commands, or `/plugins` and its Marketplaces tab |
+| JetBrains IDEs | Yes | The commands, in the IDE's terminal |
+| **Customize > Plugins** in Claude Desktop or claude.ai | Not in chat or Cowork | Not recommended. See below. |
+| Claude Code on the web (claude.ai/code) | No | Cloud sessions don't load plugins from your computer |
+
+The terminal, the Desktop Code tab and VS Code on one computer share their settings, so installing Handoffs in one installs it in all three.
+
+The **Customize > Plugins** page adds plugins to your claude.ai account for chat and Cowork. Mods don't run in either. Plugins added there also reach Claude Code as `handoffs@synced`, but only in sessions signed in with that same claude.ai account. Installing from Claude Code itself is simpler and works everywhere Handoffs can run.
 
 **The buttons on a card don't respond to clicks.**
 On Windows, you're probably in the older console window rather than Windows Terminal. See [On Windows](#on-windows). Anywhere else, check that your terminal sends mouse clicks to programs; most do by default.
@@ -150,6 +167,15 @@ Your Claude Code is older than the mod supports. Run `claude update` in your ter
 
 **The pane says "Claude hasn't been given the handoff format yet".**
 Another plugin skipped the way Handoffs teaches Claude to write cards. Claude Code's own security plugin does this on Team and Enterprise plans and on machines with managed settings. Send your next message and Claude gets the format with it; later sessions on the same machine get it with the first message. If cards still don't appear, update to the latest Handoffs and start a new session. If the pane still says so after that, run `/plugin`, and send the list of plugins you have enabled to [the issues page](https://github.com/ghosthat-studio/handoffs/issues). `/handoffs` also says how Claude got the format.
+
+**Adding the marketplace says "This repository isn't a marketplace".**
+The address you entered isn't one of ours. Use `ghosthat-studio/marketplace`, which also lists our other tools. This repo's own address, `ghosthat-studio/handoffs`, works too. Better still, skip that box and type the commands under [Install](#install) in Claude Code. See [Which plugins page to use](#which-plugins-page-to-use).
+
+**`/plugin` lists Handoffs twice.**
+For example `handoffs@ghosthat-studio` and `handoffs@synced`, or `handoffs@ghosthat-handoffs`. When two copies share a name, only one copy's hooks run, and it may not be the one you're updating. Keep `handoffs@ghosthat-studio` and remove the other. For a `/plugin` install, that's `/plugin uninstall handoffs@ghosthat-handoffs`. For `handoffs@synced`, remove it from Customize > Plugins in Claude Desktop or claude.ai. Then run `/reload-plugins`.
+
+**Handoffs does nothing in Claude Desktop's chat, Cowork, or claude.ai.**
+That's expected: mods run in Claude Code only. Open the Code tab in Claude Desktop, or run `claude` in a terminal.
 
 **Claude's replies don't turn into cards, or `/handoffs` isn't there.**
 Run `/plugin` and check that handoffs is installed and enabled, then `/reload-plugins` or start a new session. If you started Claude Code with a folder of its own plugins (`--plugin-dir`), check the path: a typo there quietly starts Claude Code without the mod.
