@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "ghosthat-handoffs",
+  "description": "Handoffs on its own, for when this repo is added as a marketplace. The full Ghost Hat Studio marketplace is ghosthat-studio/marketplace.",
+  "owner": {
+    "name": "Ghost Hat Studio",
+    "email": "hello@ghosthat.studio",
+    "url": "https://ghosthatstudio.com/toolbox/"
+  },
+  "plugins": [
+    {
+      "name": "handoffs",
+      "source": "./",
+      "description": "Turns Claude's requests to you into checklist cards in a Handoffs pane, with steps to tick, decision buttons, and Open and Copy buttons.",
+      "category": "productivity",
+      "tags": ["mod", "checklist", "workflow", "ui"],
+      "homepage": "https://ghosthatstudio.com/toolbox/handoffs/"
+    }
+  ]
+}
