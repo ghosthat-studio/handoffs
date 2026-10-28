@@ -24,7 +24,14 @@ Type these as messages in a Claude Code session: in your terminal, or in the Cod
 /plugin install handoffs@ghosthat-studio
 ```
 
-Then run `/reload-plugins`, or start a new session.
+When Claude Code asks where to install, choose **Install for you (user scope)**. The other two options install it in the current repo only. Then run `/reload-plugins`, or start a new session.
+
+Or install from your terminal without opening a session. This installs it for you in every project:
+
+```
+claude plugin marketplace add ghosthat-studio/marketplace
+claude plugin install handoffs@ghosthat-studio
+```
 
 Don't add it on the Plugins page under Customize in Claude Desktop or claude.ai. That page is for chat and Cowork, where Handoffs can't run. See [Which plugins page to use](#which-plugins-page-to-use).
 
@@ -152,9 +159,26 @@ Anthropic uses "plugin" and "marketplace" for several different places. Handoffs
 | **Customize > Plugins** in Claude Desktop or claude.ai | Not in chat or Cowork | Not recommended. See below. |
 | Claude Code on the web (claude.ai/code) | No | Cloud sessions don't load plugins from your computer |
 
-The terminal, the Desktop Code tab and VS Code on one computer share their settings, so installing Handoffs in one installs it in all three.
+The terminal, the Desktop Code tab and VS Code on one computer share their settings, so installing Handoffs in one installs it in all three, as long as you choose user scope.
 
 The **Customize > Plugins** page adds plugins to your claude.ai account for chat and Cowork. Mods don't run in either. Plugins added there also reach Claude Code as `handoffs@synced`, but only in sessions signed in with that same claude.ai account. Installing from Claude Code itself is simpler and works everywhere Handoffs can run.
+
+## Troubleshooting
+
+**Handoffs works in one project but not in others.**
+It was installed for that repo only. Every way of installing inside Claude Code asks where to install, and only **Install for you (user scope)** reaches every project. To fix it, run this in your terminal (not in a Claude Code session), from any folder:
+
+```
+claude plugin install handoffs@ghosthat-studio
+```
+
+That adds it for you everywhere. Then, from inside the project where it already worked, remove the one-repo copy. Use `--scope local` if you picked "in this repo only", or `--scope project` if you picked "all collaborators", which also takes it out of that repo's `.claude/settings.json`:
+
+```
+claude plugin uninstall handoffs@ghosthat-studio --scope local
+```
+
+Run `/reload-plugins` in any open session.
 
 **The buttons on a card don't respond to clicks.**
 On Windows, you're probably in the older console window rather than Windows Terminal. See [On Windows](#on-windows). Anywhere else, check that your terminal sends mouse clicks to programs; most do by default.
