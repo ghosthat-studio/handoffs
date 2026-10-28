@@ -2,7 +2,7 @@
 
 A mod for Claude Code. When Claude needs you to do or decide something, the request becomes a card in a Handoffs pane, so it doesn't scroll away while you're busy elsewhere.
 
-![Claude Code with the Handoffs pane open: two cards waiting, with steps to tick, decision buttons and Open buttons for files](docs/handoffs-pane.png)
+[![Claude Code with the Handoffs pane open: two cards waiting, one with both steps ticked, an option picked and a Send and close button](docs/handoffs-pane.png)](https://ghosthatstudio.com/toolbox/handoffs/)
 
 Watch the [70-second tour on the Toolbox page](https://ghosthatstudio.com/toolbox/handoffs/).
 
