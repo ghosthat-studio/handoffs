@@ -271,9 +271,15 @@ async function where($: Engine): Promise<Platform> {
   if ((await $.env.get('OS').catch(() => undefined)) === 'Windows_NT') return (platform = 'windows')
   if ((await $.env.get('WSL_DISTRO_NAME').catch(() => undefined)) !== undefined) return (platform = 'wsl')
   // Not every WSL shell sets WSL_DISTRO_NAME (an SSH login doesn't), but its kernel is always named for Microsoft.
-  const ran = await $.process.run(['uname', '-sr']).catch(() => undefined)
-  const name = ran?.stdout.trim() ?? ''
-  return (platform = name.startsWith('Darwin') ? 'mac' : /microsoft/i.test(name) ? 'wsl' : 'linux')
+  // From / so a session folder that has gone away can't fail it.
+  const ran = await $.process.run(['uname', '-sr'], { cwd: '/' }).catch(() => undefined)
+  const name = ran?.exitCode === 0 ? ran.stdout.trim() : ''
+  if (name.startsWith('Darwin')) return (platform = 'mac')
+  if (/microsoft/i.test(name)) return (platform = 'wsl')
+  if (name !== '') return (platform = 'linux')
+  // uname failed: guess from the home folder for now, and ask again next time rather than keep the guess.
+  const home = (await $.env.get('HOME').catch(() => undefined)) ?? ''
+  return home.startsWith('/Users/') ? 'mac' : 'linux'
 }
 
 // Builds before 2.1.299 refuse a tree whose Text names a face; there the heavy faces fall back to bold.
@@ -308,6 +314,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.1.1': 'Open on a link works again on a Mac. If Open ever fails, the message now says why.',
   '1.1.0': 'Cards have one Send button, and ✕ to close one. A card that’s just a choice sends when you pick.',
   '1.0.4': 'Handoffs now works on Team and Enterprise machines, where Claude Code’s own security plugin skipped the way Handoffs teaches Claude the format. Claude is also told plainly that a reply asking whether to go ahead needs a card.',
   '1.0.3': 'Claude now writes cards in sessions that start with their own system prompt, and the pane tells you when Claude can’t make cards or Claude Code needs updating.',
@@ -376,10 +383,14 @@ async function openFile($: Engine, card: Handoff, path: string) {
     return
   }
   const { argv, stdin } = openRun(os, how, target)
-  const ran = await $.process.run(argv, stdin === undefined ? undefined : { stdin }).catch(() => undefined)
+  let failure = ''
+  const ran = await $.process.run(argv, stdin === undefined ? undefined : { stdin }).catch(error => {
+    failure = String(error instanceof Error ? error.message : error)
+    return undefined
+  })
   // explorer.exe exits 1 even when it opened the file.
   const isOpened = ran !== undefined && (ran.exitCode === 0 || (ran.exitCode === 1 && (os === 'wsl' || os === 'windows')))
-  if (!isOpened) $.ui.toast(`Could not open ${path} here.`)
+  if (!isOpened) $.ui.toast(`Could not open ${path} here${why(ran, failure)}`)
   else if (how === 'show') $.ui.toast(`Showed ${path} in its folder rather than opening it.`)
 }
 
@@ -425,14 +436,25 @@ export function openHow(path: string, kind: 'file' | 'dir' | 'other', isLink: bo
   return 'show'
 }
 
+// Why an Open failed, for the toast: the refusal or error, or the program's exit code and first line of output.
+const why = (ran: { exitCode: number; stderr?: string } | undefined, failure: string) => {
+  const detail = ran === undefined ? failure : `exit ${ran.exitCode}${ran.stderr?.trim() ? `: ${ran.stderr.trim().split('\n')[0]}` : ''}`
+
+  return detail === '' ? '.' : ` (${detail.slice(0, 160)}).`
+}
+
 async function openUrl($: Engine, url: string) {
   if (!isUrl(url)) return
   const os = await where($)
   // On Windows the URL goes to explorer.exe as one argument; isUrl has already held it to http(s).
   const argv = os === 'mac' ? ['open', url] : os === 'linux' ? ['xdg-open', url] : ['explorer.exe', url]
-  const ran = await $.process.run(argv).catch(() => undefined)
+  let failure = ''
+  const ran = await $.process.run(argv).catch(error => {
+    failure = String(error instanceof Error ? error.message : error)
+    return undefined
+  })
   const isOpened = ran !== undefined && (ran.exitCode === 0 || (ran.exitCode === 1 && os !== 'mac' && os !== 'linux'))
-  if (!isOpened) $.ui.toast(`Could not open ${url} here.`)
+  if (!isOpened) $.ui.toast(`Could not open ${url} here${why(ran, failure)}`)
 }
 
 // True when the whole command already sits in one subshell: its first ( closes at its last ).

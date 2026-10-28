@@ -280,6 +280,41 @@ const LINKED = [
   '```',
 ].join('\n')
 
+test('when uname fails, a Mac still opens links with open, and the next press asks again', async ($, on) => {
+  const ran: string[][] = []
+  let isUnameDown = true
+  mock.store(on, {})
+  on('session.id', () => ({ value: 's1' }))
+  on('env.get', ($, e) => ({ value: e.name === 'HOME' ? '/Users/someone' : undefined }))
+  on('process.run', ($, e) => {
+    ran.push([...e.argv])
+    const isDown = e.argv[0] === 'uname' && isUnameDown
+    const stdout = e.argv[0] === 'uname' ? 'Darwin 25.5.0\n' : ''
+    return { value: { exitCode: isDown ? 1 : 0, stdout: isDown ? '' : stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('session.start', ($, e) => e)
+  on('command.register', () => ({ value: undefined }))
+  on('session.version', () => ({ value: { version: '2.1.299', base: '2.1.299' } }))
+  mock.clock(on, { now: Date.parse('2026-10-15T20:00:00Z') })
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('session.root', () => ({ value: '/work/project' }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('prompt.compose', () => ({ sections: [] }))
+
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\nneed: Check staging.\nlink: Staging | https://staging.example.com/\n```'))
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  await pane.press({ key: 'url-h1-https://staging.example.com/' })
+  expect(ran.some(argv => argv[0] === 'open' && argv[1] === 'https://staging.example.com/')).toBe(true)
+  expect(ran.some(argv => argv[0] === 'xdg-open')).toBe(false)
+
+  isUnameDown = false
+  const unames = ran.filter(argv => argv[0] === 'uname').length
+  await pane.press({ key: 'url-h1-https://staging.example.com/' })
+  expect(ran.filter(argv => argv[0] === 'uname').length).toBeGreaterThan(unames)
+})
+
 test('links get Open buttons and commands get a Copy button', async ($, on) => {
   const { ran } = engine(on)
   await $.session.start({ source: 'startup', cwd: '/work/project' } as never)

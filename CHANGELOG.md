@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 (2026-10-28)
+
+- Fixed: on a Mac, Open on a link could fail for a whole session with "Could not open", because Handoffs mistook the Mac for Linux after one failed check. It now checks again instead of keeping the wrong answer.
+- When Open can't open something, the message says why.
+
 ## 1.1.0 (2026-10-28)
 
 - One **Send** button replaces Send to Claude and Mark done. It shows once you've ticked or picked something, and reads **Send and close** when everything's done.
