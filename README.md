@@ -4,7 +4,7 @@ A mod for Claude Code. When Claude needs you to do or decide something, the requ
 
 ![Claude Code with the Handoffs pane open: two cards waiting, with steps to tick, decision buttons and Open buttons for files](docs/handoffs-pane.png)
 
-Watch the [52-second tour on the Toolbox page](https://ghosthatstudio.com/toolbox/handoffs/).
+Watch the [70-second tour on the Toolbox page](https://ghosthatstudio.com/toolbox/handoffs/).
 
 Each card shows what Claude needs and why, with:
 
