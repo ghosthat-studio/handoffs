@@ -13,7 +13,7 @@ Each card shows what Claude needs and why, with:
 - **Open buttons** for the files and web pages to look at
 - **Copy buttons** for commands you need to run yourself
 
-A **Waiting on you** band sits above the prompt while any card is open. When you're done, **Send to Claude** or **Mark done** sends your ticks and your pick back, and Claude carries on. Anything you tick without sending goes along with your next message.
+A **Waiting on you** band sits above the prompt while any card is open. **Send** passes your ticks and your pick back, and Claude carries on. On a card that's just a choice, picking an option sends it. **✕** closes a card. Anything you tick reaches Claude with your next message, even if you don't send it.
 
 ## Install
 
@@ -122,7 +122,7 @@ The mod reads no passwords, keys, tokens or other credentials.
 - **The handoff format.** Each session's instructions to Claude gain a short section that teaches the `handoff` block: the fields, one card per topic, and how to close a card. On Windows and WSL it adds a note on which shell to write commands for. When a session starts with its own system prompt (`--system-prompt`, a custom agent, or an app built on the Agent SDK), the same section goes along with your first message instead. Where another plugin skips both of those (Claude Code's own security plugin does on Team and Enterprise plans and machines with managed settings), the section goes with your next message, and with your first message in later sessions, followed by a one-line reminder with each message after it.
 - **Your open cards, with each message you send.** Each card's id, title, what it needs, its steps and its decision go along with your message, so Claude updates a topic's card instead of starting a new one. Any ticks or picks you made without sending go along too. Messages from scheduled tasks, other sessions and background notifications get nothing added.
 - **Your open cards after a compaction.** The same cards go back into the conversation after the summary, with their files to review, links and commands.
-- **What you send from a card.** Send to Claude and Mark done submit one message in your name: the card's id and title, the steps you ticked, the option you picked, and whether it's done.
+- **What you send from a card.** Send, and picking an option on a card that's just a choice, submit one message in your name: the card's id and title, the steps you ticked, the option you picked, and whether it's done.
 
 ### Hooks
 

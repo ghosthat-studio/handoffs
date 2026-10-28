@@ -230,9 +230,10 @@ export function apply(list: Handoff[], blocks: Parsed[], next: number, now: numb
 }
 
 // What Claude is told about a card: its ticks and its pick.
-export function report(card: Handoff, how: 'progress' | 'done' | 'open'): string {
+export function report(card: Handoff, how: 'progress' | 'done' | 'closed' | 'open'): string {
   const head =
     how === 'done' ? `Handoff ${card.id} (${card.title}): marked done.`
+      : how === 'closed' ? `Handoff ${card.id} (${card.title}): the person closed this card.`
       : how === 'open' ? `Handoff ${card.id} (${card.title}) is still open.`
         : `Handoff ${card.id} (${card.title}): progress so far.`
   const lines = [head]
@@ -307,6 +308,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.1.0': 'Cards have one Send button, and ✕ to close one. A card that’s just a choice sends when you pick.',
   '1.0.4': 'Handoffs now works on Team and Enterprise machines, where Claude Code’s own security plugin skipped the way Handoffs teaches Claude the format. Claude is also told plainly that a reply asking whether to go ahead needs a card.',
   '1.0.3': 'Claude now writes cards in sessions that start with their own system prompt, and the pane tells you when Claude can’t make cards or Claude Code needs updating.',
 }
@@ -534,7 +536,26 @@ async function send($: Engine, id: string, markDone: boolean) {
   if (card === undefined) return
   await setCard($, id, card => ({ ...card, isDirty: false, status: markDone ? 'done' : card.status }))
   await $.prompt.submit({ text: report(card, markDone ? 'done' : 'progress'), asUser: true })
-  $.ui.toast(markDone ? `${card.id} marked done and sent to Claude` : `${card.id} sent to Claude`)
+  $.ui.toast(markDone ? `${card.id} sent and closed` : `${card.id} sent`)
+}
+
+// Closing a card sends nothing now: Claude hears it was closed, with any ticks, along with the next message.
+async function closeCard($: Engine, id: string) {
+  await setCard($, id, card => ({ ...card, status: 'done', isDirty: true }))
+  $.ui.toast(`${id} closed`)
+}
+
+// Everything on the card is ticked and any choice made, so sending it finishes the card.
+export const isFinished = (card: Handoff) =>
+  card.steps.every(s => s.isDone) && (card.options.length === 0 || card.pick !== null)
+
+// A choice-only card sends from its options. Otherwise Send shows once something is ticked or picked, or at once on
+// a card with nothing to tick, where sending means it's done.
+export const sendable = (card: Handoff) => {
+  if (card.options.length > 0 && card.steps.length === 0) return false
+  if (card.steps.length === 0) return true
+
+  return card.steps.some(s => s.isDone) || card.pick !== null
 }
 
 const age = (then: number, now: number) => {
@@ -682,9 +703,13 @@ export const register: Register = on => {
       $.ui.invalidate('ui.render')
     } else if (delivery === 'submit') told.push(REMINDER)
     if (dirty.length > 0) {
-      await update($, items, cards => cards.map(card => (card.isDirty ? { ...card, isDirty: false } : card)))
+      // A card with everything ticked and any choice made is finished: the message closes it, no button needed.
+      const finished = (card: Handoff) => card.status === 'open' && isFinished(card)
+      await update($, items, cards => cards.map(card =>
+        card.isDirty ? { ...card, isDirty: false, status: finished(card) ? 'done' : card.status } : card))
       await save($)
-      told.push(`The person changed these handoff cards since you last heard:\n\n${dirty.map(card => report(card, 'progress')).join('\n\n')}`)
+      const changes = dirty.map(card => report(card, card.status === 'done' ? 'closed' : finished(card) ? 'done' : 'progress')).join('\n\n')
+      told.push(`The person changed these handoff cards since you last heard. Say in a few words at the start of your reply that you got this update, so they know their ticks reach you. A card that's plainly finished but still open, close it with a close block.\n\n${changes}`)
     }
     // Every message carries the open cards, so a new request updates its topic's card instead of adding one.
     const open = list.filter(card => card.status === 'open' && !card.isDirty)
@@ -769,7 +794,7 @@ export const register: Register = on => {
         <Box key={`card-${card.id}`} flexDirection="column" rowGap='md' paddingX='md' paddingY='md' backgroundColor={A.card} borderStyle="round" borderColor={A.outline}>
           <Box flexDirection="row" justifyContent="space-between" alignItems="center">
             <Text {...face({ mono: true, size: 'footnote' })} color={INK}>{card.id.toUpperCase()} · {age(card.createdAt, now)}</Text>
-            {card.isDirty && <Text {...face({ weight: 'semibold' })} color={INK}>Unsent changes</Text>}
+            <Button key={`close-${card.id}`} plain dimColor label="✕" onPress={() => void closeCard($, card.id)} />
           </Box>
           <Text {...face({ size: 'title', weight: 'bold' })} color={A.steel}>{card.title}</Text>
 
@@ -807,7 +832,9 @@ export const register: Register = on => {
                 {card.options.map(o => (
                   <Button key={`pick-${card.id}-${o}`} label={card.pick === o ? `✓ ${o}` : o}
                     variant={card.pick === o ? 'primary' : 'secondary'}
-                    onPress={() => void setCard($, card.id, c => ({ ...c, isDirty: true, pick: c.pick === o ? null : o }))}>
+                    onPress={() => void (card.steps.length === 0
+                      ? setCard($, card.id, c => ({ ...c, pick: o })).then(() => send($, card.id, true))
+                      : setCard($, card.id, c => ({ ...c, isDirty: true, pick: c.pick === o ? null : o })))}>
                     {card.pick === o ? `✓ ${o}` : brass(o)}
                   </Button>
                 ))}
@@ -863,13 +890,12 @@ export const register: Register = on => {
             </Box>
           )}
 
-          <Box flexDirection="column" rowGap='md' marginTop='xl'>
-            <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap='md' rowGap='md'>
-              <Button key={`send-${card.id}`} label="Send to Claude" variant="primary" onPress={() => void send($, card.id, false)} />
-              <Button key={`done-${card.id}`} label="Mark done" onPress={() => void send($, card.id, true)}>{brass('Mark done')}</Button>
+          {sendable(card) && (
+            <Box flexDirection="row" marginTop='xl'>
+              <Button key={`send-${card.id}`} label={isFinished(card) ? 'Send and close' : 'Send'} variant="primary"
+                onPress={() => void send($, card.id, isFinished(card))} />
             </Box>
-            {card.isDirty && <Text color={DIM_INK}>Not sent yet: your changes also ride along with your next message.</Text>}
-          </Box>
+          )}
         </Box>
       )
     }

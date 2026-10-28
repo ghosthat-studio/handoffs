@@ -82,10 +82,14 @@ test('a reply with a handoff block becomes a card the person can tick, pick and 
   }
 
   const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+  // Nothing ticked or picked yet: nothing to send.
+  expect(await pane.find({ key: 'send-h1' })).toBeUndefined()
   await pane.press({ key: 'step-h1-0' })
   await pane.press({ key: 'pick-h1-Server rack' })
   expect((await pane.find({ key: 'pick-h1-Server rack' }))?.props.label).toBe('✓ Server rack')
-  expect((await pane.find({ type: 'Text', text: 'Unsent changes' }))).toBeDefined()
+  // A card with steps doesn't send on a pick.
+  expect(sent).toHaveLength(0)
+  expect((await pane.find({ key: 'send-h1' }))?.props.label).toBe('Send')
 
   await pane.press({ key: 'send-h1' })
   expect(sent).toHaveLength(1)
@@ -93,11 +97,87 @@ test('a reply with a handoff block becomes a card the person can tick, pick and 
   expect(sent[0]).toContain('- [x] Open both thumbnails')
   expect(sent[0]).toContain('- [ ] Check them at phone size')
   expect(sent[0]).toContain('Decision: Server rack')
-  expect((await pane.find({ type: 'Text', text: 'Unsent changes' }))).toBeUndefined()
 
-  await pane.press({ key: 'done-h1' })
+  await pane.press({ key: 'step-h1-1' })
+  expect((await pane.find({ key: 'send-h1' }))?.props.label).toBe('Send and close')
+  await pane.press({ key: 'send-h1' })
   expect(sent[1]).toContain('marked done')
   expect((await pane.find({ type: 'Text', text: /Nothing waiting on you/ }))).toBeDefined()
+})
+
+test('a card that is just a choice sends when an option is picked', async ($, on) => {
+  engine(on)
+  const sent: string[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\ntitle: Pick a database\nneed: Choose one.\ndecide: Postgres | SQLite\n```'))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ key: 'send-h1' })).toBeUndefined()
+  await pane.press({ key: 'pick-h1-SQLite' })
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toContain('marked done')
+  expect(sent[0]).toContain('Decision: SQLite')
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+})
+
+test('a card with nothing to tick sends and closes', async ($, on) => {
+  engine(on)
+  on('prompt.submit', ($, e) => ({ text: e.text }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\nneed: Sign in to the dashboard.\n```'))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect((await pane.find({ key: 'send-h1' }))?.props.label).toBe('Send and close')
+})
+
+test('ticking everything closes the card with the next message, no button needed', async ($, on) => {
+  engine(on)
+  const contexts: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    contexts.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\ntitle: Set up the database\nneed: Get Postgres running.\nstep: Install Postgres\nstep: Create the test user\n```'))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  await pane.press({ key: 'step-h1-0' })
+  await pane.press({ key: 'step-h1-1' })
+  await $.prompt.submit({ text: 'Both done', asUser: true, origin: { kind: 'user' } } as never)
+  const told = (contexts[0] ?? []).join('\n')
+  expect(told).toContain('Handoff h1 (Set up the database): marked done.')
+  expect(told).toContain('close it with a close block')
+  await pane.redraw()
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+})
+
+test('closing a card sends nothing; Claude hears with the next message and says it got it', async ($, on) => {
+  engine(on)
+  const sent: string[] = []
+  const contexts: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.text)
+    contexts.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(REPLY))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  await pane.press({ key: 'step-h1-0' })
+  await pane.press({ key: 'close-h1' })
+  expect(sent).toHaveLength(0)
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+
+  await $.prompt.submit({ text: 'Moving on', asUser: true, origin: { kind: 'user' } } as never)
+  const told = (contexts[0] ?? []).join('\n')
+  expect(told).toContain('Handoff h1 (Pick the 002 thumbnail): the person closed this card.')
+  expect(told).toContain('- [x] Open both thumbnails')
+  expect(told).toContain('that you got this update')
 })
 
 test('the band waits while a card is open and steps aside when none is', async ($, on) => {

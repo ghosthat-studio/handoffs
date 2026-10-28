@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 (2026-10-28)
+
+- One **Send** button replaces Send to Claude and Mark done. It shows once you've ticked or picked something, and reads **Send and close** when everything's done.
+- On a card that's just a choice, picking an option sends it straight away.
+- **✕** closes a card. Claude hears it was closed, with anything you ticked, along with your next message.
+- Tick everything on a card and your next message closes it, with no button to press. Claude can still close any card that's plainly finished.
+- When your ticks reach Claude with a message, Claude says it got them.
+
 ## 1.0.4 (2026-10-24)
 
 - Handoffs now works where Claude Code's built-in security plugin (`sec-default`, on Team and Enterprise plans and machines with managed settings) skips third-party plugins' prompt hooks. Before, Claude never got the handoff format there. Now it goes with your next message, and with your first message in every session after that, plus a one-line reminder with each message after it.
