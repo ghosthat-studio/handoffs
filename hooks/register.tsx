@@ -41,6 +41,16 @@ const FULLSCREEN_HINT = 'The pane sits beside the conversation in fullscreen mod
 // The theme setting names light or dark, or auto, which follows the system. Under auto, the system's own setting is
 // read once and then watched (see session.start), so the pane switches when the system does, not at its next redraw.
 let appearance: Mode | undefined
+
+// While Claude waits on its own question dialog (the AskUserQuestion tool), the band and pane say so. The dialog
+// holds the question itself; Handoffs only points to it, since that's a request it never sees as a block.
+type Asking = { first: string; count: number }
+let asking: Asking | undefined
+const askedOf = (questions: unknown): Asking | undefined => {
+  const list = Array.isArray(questions) ? questions : []
+  const head = list[0] as { question?: unknown } | undefined
+  return list.length === 0 ? undefined : { first: typeof head?.question === 'string' ? head.question : '', count: list.length }
+}
 async function themeOf($: Engine) {
   return (await $.config.list().catch(() => [])).find(row => row.key === 'theme')?.value
 }
@@ -317,6 +327,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.1.3': 'When Claude asks you something in its own question box, the band and this pane now say so until you answer.',
   '1.1.2': 'In Claude Desktop, VS Code and the mobile app, the pane now follows the app’s light or dark mode.',
   '1.1.1': 'Open on a link works again on a Mac. If Open ever fails, the message now says why.',
   '1.1.0': 'Cards have one Send button, and ✕ to close one. A card that’s just a choice sends when you pick.',
@@ -758,6 +769,18 @@ export const register: Register = on => {
     return { ...done, messages: [...done.messages, { role: 'user', text, toolUses: [] }] }
   }).catch(($, e, next) => next(e))
 
+  // Claude's own question dialog is waiting on the person too, until it's answered or dismissed.
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    asking = askedOf((e as { questions?: unknown }).questions)
+    $.ui.invalidate('ui.render')
+    try {
+      return await next(e)
+    } finally {
+      asking = undefined
+      $.ui.invalidate('ui.render')
+    }
+  })
+
   // The raw block becomes a one-line pointer in the transcript.
   on('ui.render', { component: 'AssistantMessage' }, ($, e, next) => {
     if (!e.props.text.includes('```handoff')) return next(e)
@@ -768,7 +791,8 @@ export const register: Register = on => {
   // "Waiting on you" while anything is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const open = (await read($, items)).filter(card => card.status === 'open')
-    if (open.length === 0 || e.props.hasSurvey) return next(e)
+    const asked = asking
+    if ((open.length === 0 && asked === undefined) || e.props.hasSurvey) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const first = open[0]
     const below = await next(e)
@@ -780,10 +804,12 @@ export const register: Register = on => {
         <Box key="waiting" flexDirection="row" alignItems="center" gap='sm' paddingX='sm' borderStyle="round" borderColor={ACCENTS.dark.outline}>
           <Text {...face({ weight: 'bold' })}>Waiting on you:</Text>
           <Text {...face({ weight: 'semibold' })} wrap="truncate-end">
-            {open.length === 1 ? first?.title : `${open.length} handoffs`}
-            {open.length > 1 && <Text> · {first?.title}</Text>}
+            {asked !== undefined ? `Claude asked you ${asked.count === 1 ? 'a question' : `${asked.count} questions`}`
+              : open.length === 1 ? first?.title : `${open.length} handoffs`}
+            {asked !== undefined && open.length > 0 && <Text> · {open.length === 1 ? '1 handoff' : `${open.length} handoffs`}</Text>}
+            {asked === undefined && open.length > 1 && <Text> · {first?.title}</Text>}
           </Text>
-          <Button key="open-pane" label="Open" variant="primary" onPress={() => void $.ui.open({ id: PANE, title: TITLE })} />
+          {open.length > 0 && <Button key="open-pane" label="Open" variant="primary" onPress={() => void $.ui.open({ id: PANE, title: TITLE })} />}
         </Box>
         {below}
       </Box>
@@ -926,6 +952,9 @@ export const register: Register = on => {
       )
     }
 
+    const asked = asking
+    const waiting = open.length + (asked === undefined ? 0 : 1)
+
     return (
       <Box flexDirection="column" rowGap='md' padding={1} backgroundColor={A.ground}>
         <Box flexDirection="row" alignItems="center" gap='md'>
@@ -933,9 +962,9 @@ export const register: Register = on => {
           <Box flexDirection="column">
             <Text {...face({ mono: true, size: 'footnote', weight: 'bold' })} color={A.steel}>GHOST HAT STUDIO · HANDOFFS</Text>
             <Text {...face({ size: 'title', weight: 'bold' })} color={A.steel}>
-              {open.length === 0 ? 'Nothing waiting on you' : open.length === 1 ? '1 waiting on you' : `${open.length} waiting on you`}
+              {waiting === 0 ? 'Nothing waiting on you' : `${waiting} waiting on you`}
             </Text>
-            {open.length === 0 && (
+            {waiting === 0 && (
               <Text color={INK}>When Claude needs you to do or decide something, it lands here as a card.</Text>
             )}
             {e.surface === 'terminal' && e.viewport?.isFullscreen === false && <Text color={DIM_INK}>{FULLSCREEN_HINT}</Text>}
@@ -955,6 +984,14 @@ export const register: Register = on => {
             )}
           </Box>
         </Box>
+
+        {asked !== undefined && (
+          <Box key="asking" flexDirection="column" rowGap='sm' paddingX='md' paddingY='md' backgroundColor={A.card} borderStyle="round" borderColor={A.outline}>
+            {label(asked.count === 1 ? 'Claude asked you a question' : `Claude asked you ${asked.count} questions`)}
+            {asked.first !== '' && <Text color={INK} {...face({ weight: 'semibold' })}>{asked.first}</Text>}
+            <Text color={INK}>Answer it in the conversation, and Claude carries on.</Text>
+          </Box>
+        )}
 
         {open.map(cardView)}
 

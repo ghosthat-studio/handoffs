@@ -730,3 +730,85 @@ test('a later update without its own note points to the changelog, and keeps a d
   const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
   expect(ran.text).toMatch(/Handoffs updated to 1\.0\.5\. What changed:/)
 })
+
+// Claude's own question dialog, held open until `answer` is called.
+function askable(on: On) {
+  let answer = () => {}
+  on('tool.call', () => new Promise(resolve => { answer = () => resolve({ result: { answers: {} } } as never) }))
+  return { answer: () => answer() }
+}
+const QUESTIONS = [
+  { question: 'What should wake the Sentry agent up?', header: 'Trigger', multiSelect: false, options: [{ label: 'Alerts', description: 'On each alert' }, { label: 'Sweep', description: 'Daily' }] },
+  { question: 'Which channel?', header: 'Channel', multiSelect: false, options: [{ label: 'Ops', description: '#ops' }, { label: 'Eng', description: '#eng' }] },
+]
+
+test('while Claude’s own question dialog is open, the band and pane say Claude asked, and stop once it’s answered', async ($, on) => {
+  engine(on)
+  const dialog = askable(on)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const asked = $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS } as never)
+  await Promise.resolve()
+
+  const band = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...BAND })
+  expect(await band.find({ type: 'Text', text: /Claude asked you 2 questions/ })).toBeDefined()
+  expect(await band.find({ key: 'open-pane' })).toBeUndefined()
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /1 waiting on you/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /What should wake the Sentry agent up\?/ })).toBeDefined()
+
+  dialog.answer()
+  await asked
+  expect(await band.find({ type: 'Text', text: /Claude asked/ })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+  expect(await pane.find({ key: 'asking' })).toBeUndefined()
+  await band.unmount()
+  await pane.unmount()
+})
+
+// Regression guard for light and dark. Twice the pane drew dark-on-dark: once when a light setting kept the dark
+// accents, and once when Desktop in light mode got the near-black ground behind its own (dark) text colour. Every
+// theme setting, on every surface, with a card and a question open so every part of the pane is drawn.
+test('light and dark: no surface ever draws the pane’s text on a ground it wasn’t chosen for', async ($, on) => {
+  engine(on)
+  let theme = 'dark'
+  on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: theme, provider: { kind: 'engine' } }] }))
+  on('config.set', ($, e) => { theme = String(e.value); return { value: e.value } })
+  const dialog = askable(on)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(REPLY))
+  const asked = $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS } as never)
+  await Promise.resolve()
+
+  const DARK_TEXT = ['#B3A8F0', '#98ABC1', '#D4C5A4']
+  const settings = [
+    { value: 'dark', style: '', isDark: true },
+    { value: 'light', style: '', isDark: false },
+    { value: 'light-daltonized', style: '', isDark: false },
+    { value: 'auto', style: '', isDark: false },
+    { value: 'auto', style: 'Dark\n', isDark: true },
+  ]
+  for (const setting of settings) {
+    system.style = setting.style
+    await $.config.set({ key: 'theme', value: setting.value } as never)
+    for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
+      const pane = await $.ui.mount({ plugin: 'handoffs', surface, ...PANE })
+      const drawn = JSON.stringify(await pane.find({ type: 'Box' }))
+      const where = `${surface} under ${setting.value}${setting.style === '' ? '' : ' (system dark)'}`
+      expect(drawn, where).toContain('What should wake the Sentry agent up?')
+      expect(drawn, where).toContain('Pick the 002 thumbnail')
+      if (surface === 'terminal') {
+        // The terminal's theme names the mode: the near-black ground with the light accents only in dark.
+        expect(drawn.includes('"backgroundColor":"#0A0B0E"'), where).toBe(setting.isDark)
+        for (const hex of DARK_TEXT) expect(drawn.includes(`"color":"${hex}"`), `${where}: ${hex}`).toBe(setting.isDark)
+      } else {
+        // The app picks its own light or dark, which the setting doesn't name: no ground, and text only in theme keys.
+        expect(drawn, where).not.toContain('backgroundColor')
+        expect(drawn, where).not.toMatch(/"color":"#/)
+      }
+      await pane.unmount()
+    }
+  }
+  dialog.answer()
+  await asked
+  system.style = ''
+})

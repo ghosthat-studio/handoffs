@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3 (2026-10-29)
+
+- When Claude asks you something in its own question box (the one with Skip and Next), the band above the prompt and the pane now say Claude is waiting on you, until you answer.
+
 ## 1.1.2 (2026-10-29)
 
 - Fixed: in Claude Desktop, VS Code and the mobile app, the pane now follows the app’s own light or dark mode. In light mode it used to keep a dark background behind dark text, which made cards hard to read.
