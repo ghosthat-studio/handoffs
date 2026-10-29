@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 (2026-10-29)
+
+- Fixed: in Claude Desktop, VS Code and the mobile app, the pane now follows the app’s own light or dark mode. In light mode it used to keep a dark background behind dark text, which made cards hard to read.
+
 ## 1.1.1 (2026-10-28)
 
 - Fixed: on a Mac, Open on a link could fail for a whole session with "Could not open", because Handoffs mistook the Mac for Linux after one failed check. It now checks again instead of keeping the wrong answer.

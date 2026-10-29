@@ -496,11 +496,23 @@ test('the pane follows a light theme: no ground of its own, theme text, and the 
   engine(on)
   on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: 'light', provider: { kind: 'engine' } }] }))
   await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
-  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
   const header = await pane.find({ type: 'Text', text: /GHOST HAT STUDIO/ })
   expect(header?.props.color).toBe('#3A4A5E')
   expect(JSON.stringify(await pane.find({ type: 'Box' }))).not.toContain('backgroundColor')
   await pane.unmount()
+})
+
+test('off the terminal, the pane takes the app’s own ground and text, whatever the theme setting says', async ($, on) => {
+  engine(on)
+  on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: 'dark', provider: { kind: 'engine' } }] }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  for (const surface of ['desktop', 'vscode'] as const) {
+    const pane = await $.ui.mount({ plugin: 'handoffs', surface, ...PANE })
+    expect(JSON.stringify(await pane.find({ type: 'Box' }))).not.toContain('backgroundColor')
+    expect((await pane.find({ type: 'Text', text: /GHOST HAT STUDIO/ }))?.props.color).toBe('inactive')
+    await pane.unmount()
+  }
 })
 
 test('the pane stays dark under a dark theme, with headings light enough to read', async ($, on) => {

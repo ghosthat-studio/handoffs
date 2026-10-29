@@ -22,18 +22,21 @@ type Saved = Record<string, { items: Handoff[]; seq: number; at: number }>
 // the theme's own colours, so it reads on every surface and theme. The Ghost Hat accents come in a dark and a light
 // set, each 7:1 or more on its ground where they colour text; the outlines keep the brand Violet.
 type Mode = 'dark' | 'light'
+const INK = 'text'
+const DIM_INK = 'inactive'
 const ACCENTS = {
   // The heading violet, a lighter tint of the brand Violet (#8F82D8, which is under 7:1 for text).
   // In dark, the pane keeps the brand's near-black and its cards gunmetal; in light it takes the theme's own ground.
   dark: { heading: '#B3A8F0', outline: '#8F82D8', steel: '#98ABC1', brass: '#D4C5A4', ground: '#0A0B0E', card: '#0D0F12' },
   light: { heading: '#463A9A', outline: '#463A9A', steel: '#3A4A5E', brass: '#664510', ground: undefined, card: undefined },
 }
+// Desktop, VS Code and mobile draw in their own light or dark, which the theme setting doesn't name and the mod can't
+// read. There the pane paints no ground and colours its text with theme keys, which those apps resolve to their own
+// mode; only the outline is fixed, in the brand Violet, which reads on both.
+const IN_APP = { heading: INK, outline: '#8F82D8', steel: DIM_INK, brass: INK, ground: undefined, card: undefined }
 // Outside fullscreen the terminal gives the pane no column of its own. The mod can't change that setting itself, so
 // it says how.
 const FULLSCREEN_HINT = 'The pane sits beside the conversation in fullscreen mode. Type /tui fullscreen to turn it on.'
-
-const INK = 'text'
-const DIM_INK = 'inactive'
 
 // The theme setting names light or dark, or auto, which follows the system. Under auto, the system's own setting is
 // read once and then watched (see session.start), so the pane switches when the system does, not at its next redraw.
@@ -314,6 +317,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.1.2': 'In Claude Desktop, VS Code and the mobile app, the pane now follows the app’s light or dark mode.',
   '1.1.1': 'Open on a link works again on a Mac. If Open ever fails, the message now says why.',
   '1.1.0': 'Cards have one Send button, and ✕ to close one. A card that’s just a choice sends when you pick.',
   '1.0.4': 'Handoffs now works on Team and Enterprise machines, where Claude Code’s own security plugin skipped the way Handoffs teaches Claude the format. Claude is also told plainly that a reply asking whether to go ahead needs a card.',
@@ -796,7 +800,7 @@ export const register: Register = on => {
     const open = list.filter(card => card.status === 'open')
     const done = list.filter(card => card.status === 'done')
     const system = await where($)
-    const A = ACCENTS[await modeOf($)]
+    const A = e.surface === 'terminal' ? ACCENTS[await modeOf($)] : IN_APP
     const paste = pasteInto(system, await distroOf($))
 
     const label = (text: string, aside?: string) => (
