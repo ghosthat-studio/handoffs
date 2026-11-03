@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 (2026-11-03)
+
+- Copy now takes a command exactly as Claude wrote it, for pasting into your own terminal. A command with `cd` or `export` used to be wrapped in `( … )`, which most people deleted before running it.
+- A new Run in Claude button puts the command in your prompt after a `!`, so Claude Code runs it in its own shell. There it goes inside `( … )`, so a `cd` doesn't move Claude's working folder for the rest of the session and the whole line runs as one command. A draft you're typing is never replaced. Not shown on Windows, where run lines are written for PowerShell.
+- Each card has a Copy as Markdown button. It copies the whole card, with its steps as a checklist, ready to paste into a pull request, an issue or a doc.
+- A resumed session with cards still waiting opens the pane, as a new card does.
+- When the pane can't open on its own (in a narrow window, for example), `/handoffs` says why.
+
 ## 1.1.3 (2026-10-29)
 
 - When Claude asks you something in its own question box (the one with Skip and Next), the band above the prompt and the pane now say Claude is waiting on you, until you answer.

@@ -1,10 +1,13 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import type { Handoff } from '../types'
 
-import { apply, forShell, openArgv, openHow, openList, openRun, parseAnswer, pasteInto, shellNote } from '../hooks/register.tsx'
+import { apply, forClaude, openArgv, openHow, openList, openRun, parseAnswer, pasteInto, shellNote, toMarkdown } from '../hooks/register.tsx'
 
 // The Mac's light or dark setting, as `defaults read -g AppleInterfaceStyle` reports it: '' in light mode.
 const system = { style: '' }
+// Why Claude Code declines to place the pane when the mod opens it unasked; undefined places it.
+const placement: { refused?: string } = {}
 
 // What the engine would answer beneath the plugin in a session.
 function engine(on: On, version = '2.1.299', stored: Record<string, unknown> = {}) {
@@ -25,7 +28,18 @@ function engine(on: On, version = '2.1.299', stored: Record<string, unknown> = {
   const clock = mock.clock(on, { now: Date.parse('2026-10-15T20:00:00Z') })
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('session.root', () => ({ value: '/work/project' }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  // The prompt box: what the person has typed, and what the mod put there.
+  const box = { text: '' }
+  on('prompt.read', () => ({ value: { text: box.text, cursor: box.text.length } }))
+  on('prompt.fill', ($, e) => {
+    box.text = e.text
+    return { isFilled: true }
+  })
+  const opens: string[] = []
+  on('ui.open', ($, e) => {
+    opens.push(e.id)
+    return { value: placement.refused === undefined ? { isPlaced: true } : { isPlaced: false, reason: placement.refused } }
+  })
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.compose', () => ({ sections: [] }))
   on('ui.render', ($, e) => {
@@ -33,7 +47,7 @@ function engine(on: On, version = '2.1.299', stored: Record<string, unknown> = {
     return <Text>{e.component === 'AssistantMessage' ? e.props.text : ''}</Text>
   })
 
-  return { ran, clock }
+  return { ran, clock, opens, box }
 }
 
 const PANE = {
@@ -333,7 +347,92 @@ test('links get Open buttons and commands get a Copy button', async ($, on) => {
 
   await pane.press({ key: 'copy-h1-0' })
   const copied = ran.find(r => r.argv[0] === 'pbcopy')
-  expect(copied?.stdin).toBe('( cd /home/me/project && npm run deploy )')
+  // Copied exactly as Claude wrote it, with no ( … ) around it.
+  expect(copied?.stdin).toBe('cd /home/me/project && npm run deploy')
+  expect(await pane.find({ type: 'Code', text: /^\(/ })).toBeUndefined()
+})
+
+test('Run in Claude puts the command in the prompt after a !, inside one subshell', async ($, on) => {
+  const { box, ran } = engine(on)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(LINKED))
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+
+  // A draft the person is writing is never thrown away.
+  box.text = 'half a thought'
+  await pane.press({ key: 'claude-h1-0' })
+  expect(box.text).toBe('half a thought')
+
+  box.text = ''
+  await pane.press({ key: 'claude-h1-0' })
+  expect(box.text).toBe('! ( cd /home/me/project && npm run deploy )')
+  // Copy, for the person's own terminal, still takes it as written.
+  await pane.press({ key: 'copy-h1-0' })
+  expect(ran.find(r => r.argv[0] === 'pbcopy')?.stdin).toBe('cd /home/me/project && npm run deploy')
+})
+
+test('a command for Claude’s shell is wrapped once, whatever it holds', () => {
+  expect(forClaude('cd /abs && make')).toBe('! ( cd /abs && make )')
+  expect(forClaude('npm test')).toBe('! ( npm test )')
+  expect(forClaude('(cd /a && make)')).toBe('! (cd /a && make)')
+  // Two subshells side by side are not one: the cd between them would still stick.
+  expect(forClaude('(make a) && cd /b && (make c)')).toBe('! ( (make a) && cd /b && (make c) )')
+})
+
+test('a card copies as Markdown, ready to paste into a pull request', async ($, on) => {
+  const { ran } = engine(on)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(LINKED))
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+  await pane.press({ key: 'step-h1-0' })
+  await pane.press({ key: 'md-h1' })
+
+  expect(ran.find(r => r.argv[0] === 'pbcopy')?.stdin).toBe([
+    '## Merge the CMS PR',
+    '',
+    'Review and merge the pull request, then check staging at https://staging.ghosthat.ai/studio.',
+    '',
+    '- [x] Read the diff',
+    '- [ ] Merge it',
+    '',
+    '### Files',
+    '',
+    '- `cms/studio/README.md`',
+    '',
+    '### Links',
+    '',
+    '- [github.com/owner/repo/pull/22](https://github.com/owner/repo/pull/22)',
+    '- [Gmail thread](https://mail.google.com/mail/u/0/#inbox/abc123)',
+    '- [staging.ghosthat.ai/studio](https://staging.ghosthat.ai/studio)',
+    '',
+    '### Commands',
+    '',
+    '```bash',
+    'cd /home/me/project && npm run deploy',
+    '```',
+  ].join('\n'))
+})
+
+test('a decision copies as what was picked, or the choices still open', () => {
+  const card: Handoff = {
+    id: 'h2', title: 'Pick one', need: 'Pick a thumbnail.', why: 'It uploads Monday.', steps: [], options: ['A', 'B'], pick: null,
+    reviews: [], links: [], runs: [], root: '/w', status: 'open', createdAt: 0, isDirty: false,
+  }
+  expect(toMarkdown(card)).toBe('## Pick one\n\nPick a thumbnail.\n\nIt uploads Monday.\n\nDecide: A / B')
+  expect(toMarkdown({ ...card, pick: 'B' })).toMatch(/Decided: B$/)
+})
+
+test('when the pane cannot open on its own, /handoffs says why', async ($, on) => {
+  engine(on)
+  placement.refused = 'unasked opens are placed from 144 columns; this is 120'
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(LINKED))
+  placement.refused = undefined
+  const ran = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(ran.text).toMatch(/The pane could not open on its own: unasked opens are placed from 144 columns; this is 120/)
+  // Said once: the next /handoffs has nothing new to report.
+  const again = await $.command.run({ command: 'handoffs', args: '' } as never)
+  expect(again.text).not.toMatch(/could not open on its own/)
 })
 
 test('rewriting a card by id drops what the new block leaves out and keeps ticks', async ($, on) => {
@@ -373,16 +472,20 @@ test('a resumed session gets its cards back, aged in hours', async ($, on) => {
   expect(await pane.find({ type: 'Text', text: /3h ago/ })).toBeDefined()
 })
 
-test('a command that would move the shared shell is copied inside a subshell; others are left as they are', () => {
-  expect(forShell('cd /abs/cms/studio && npm run deploy')).toBe('( cd /abs/cms/studio && npm run deploy )')
-  expect(forShell('export NODE_ENV=production; npm run build')).toBe('( export NODE_ENV=production; npm run build )')
-  expect(forShell('source .venv/bin/activate && pytest')).toBe('( source .venv/bin/activate && pytest )')
-  expect(forShell('( cd /abs/cms/studio && npm run deploy )')).toBe('( cd /abs/cms/studio && npm run deploy )')
-  expect(forShell('(cd /a && make)')).toBe('(cd /a && make)')
-  // Two subshells side by side are not one wrap: the cd between them would still stick.
-  expect(forShell('(make a) && cd /b && (make c)')).toBe('( (make a) && cd /b && (make c) )')
-  expect(forShell('gh pr merge 22 --squash')).toBe('gh pr merge 22 --squash')
-  expect(forShell('npm run abcd')).toBe('npm run abcd')
+test('a resumed session with open cards opens the pane', async ($, on) => {
+  const card = {
+    id: 'h4', title: 'Saved card', need: 'Still needed.', why: '', steps: [], options: [], pick: null,
+    reviews: [], links: [], runs: [], root: '/work', status: 'open', createdAt: Date.parse('2026-10-15T17:00:00Z'), isDirty: false,
+  }
+  const { opens } = engine(on, '2.1.299', { sessions: { s1: { items: [card], seq: 5, at: Date.parse('2026-10-15T19:00:00Z') } } })
+  await $.session.start({ source: 'resume', cwd: '/work/project' } as never)
+  expect(opens).toEqual(['handoffs'])
+})
+
+test('a new session with nothing waiting does not open the pane', async ($, on) => {
+  const { opens } = engine(on)
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  expect(opens).toEqual([])
 })
 
 test('Open never runs a program: documents open, code opens as text, apps and links are shown in their folder', () => {
@@ -449,10 +552,6 @@ test('the open-card list names each card, its steps and its decision, and asks C
 })
 
 test('run lines follow the shell they are pasted into', () => {
-  // PowerShell has no ( … ) subshell, so a Windows command is copied as written.
-  expect(forShell('Set-Location C:\\proj; npm run deploy', 'windows')).toBe('Set-Location C:\\proj; npm run deploy')
-  expect(forShell('cd /abs && make', 'windows')).toBe('cd /abs && make')
-  expect(forShell('cd /abs && make', 'wsl')).toBe('( cd /abs && make )')
   expect(pasteInto('windows')).toEqual({ where: 'PowerShell', language: 'powershell' })
   expect(pasteInto('wsl', 'Ubuntu').where).toBe('your Ubuntu terminal')
   expect(pasteInto('wsl').where).toBe('your WSL terminal')

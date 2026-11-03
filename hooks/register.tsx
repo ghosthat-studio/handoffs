@@ -44,6 +44,9 @@ let appearance: Mode | undefined
 
 // While Claude waits on its own question dialog (the AskUserQuestion tool), the band and pane say so. The dialog
 // holds the question itself; Handoffs only points to it, since that's a request it never sees as a block.
+// Why the pane last failed to open on its own, as Claude Code put it; /handoffs reports it.
+let unplaced: string | undefined
+
 type Asking = { first: string; count: number }
 let asking: Asking | undefined
 const askedOf = (questions: unknown): Asking | undefined => {
@@ -327,6 +330,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.0': 'Copy now takes a command exactly as written, and Run in Claude puts it in your prompt to run with !. Each card also has Copy as Markdown, for a pull request or an issue.',
   '1.1.3': 'When Claude asks you something in its own question box, the band and this pane now say so until you answer.',
   '1.1.2': 'In Claude Desktop, VS Code and the mobile app, the pane now follows the app’s light or dark mode.',
   '1.1.1': 'Open on a link works again on a Mac. If Open ever fails, the message now says why.',
@@ -486,12 +490,19 @@ const isWrapped = (command: string) => {
   return depth === 0
 }
 
-// A pasted command runs in Claude's shared shell (! in the prompt), where a cd, export or source would stick
-// for the rest of the session. Such a command is copied inside a subshell; one already wrapped is left alone.
-const STICKY = /(^|[;&|(]\s*|\s)(cd|pushd|popd|export|unset|source|alias)(\s|$)|(^|[;&|]\s*)\.\s/
-// On Windows a command is written for PowerShell, which has no ( … ) subshell, so it is copied as written.
-export const forShell = (command: string, os?: Platform) =>
-  os === 'windows' || isWrapped(command) || !STICKY.test(command) ? command : `( ${command.trim()} )`
+// A run line for Claude's own shell, after a ! in the prompt. Copy gives the command as written, for the person's
+// terminal; here it goes inside one subshell, so a cd or export doesn't move Claude's shell for the rest of the
+// session, and the whole line runs as one command (Claude Desktop's ! stops at a bare &&).
+export const forClaude = (command: string) => `! ${isWrapped(command) ? command.trim() : `( ${command.trim()} )`}`
+
+async function runInClaude($: Engine, command: string) {
+  if ((await $.prompt.read()).text.trim() !== '') {
+    $.ui.toast('Your prompt has a draft in it. Send or clear it, then press Run in Claude again.')
+    return
+  }
+  const filled = await $.prompt.fill({ text: forClaude(command) }).catch(() => ({ isFilled: false }))
+  $.ui.toast(filled.isFilled ? 'The command is in your prompt. Press Enter to run it.' : 'Could not reach the prompt here; use Copy instead.')
+}
 
 // Where the person pastes a run line. On Windows that is PowerShell, the terminal's default; under WSL it is the
 // distro's own shell, since a WSL command means nothing to PowerShell.
@@ -511,9 +522,9 @@ export function shellNote(os: Platform, distro?: string) {
 // The surface's own clipboard first; the desktop app's is out of a mod's reach, so then the machine's.
 const distroOf = async ($: Engine) => (await $.env.get('WSL_DISTRO_NAME').catch(() => undefined)) || undefined
 
-async function copy($: Engine, text: string, surface: RenderSurface) {
+async function copy($: Engine, text: string, surface: RenderSurface, said?: { copied: string; failed: string }) {
   const os = await where($)
-  const copied = `Copied. Paste it into ${pasteInto(os, await distroOf($)).where}.`
+  const copied = said?.copied ?? `Copied. Paste it into ${pasteInto(os, await distroOf($)).where}.`
   const viaSurface = await $.ui.copy({ text, surface }).catch(() => ({ isCopied: false }))
   if (viaSurface.isCopied) {
     $.ui.toast(copied)
@@ -529,8 +540,23 @@ async function copy($: Engine, text: string, surface: RenderSurface) {
       return
     }
   }
-  $.ui.toast('Could not reach the clipboard here; the command is on the card to copy by hand.')
+  $.ui.toast(said?.failed ?? 'Could not reach the clipboard here; the command is on the card to copy by hand.')
 }
+
+// A card as Markdown, ready to paste into a pull request, an issue or a doc.
+export function toMarkdown(card: Handoff, language = 'bash') {
+  const lines = [`## ${card.title}`, '', card.need]
+  if (card.why !== '') lines.push('', card.why)
+  if (card.steps.length > 0) lines.push('', ...card.steps.map(s => `- [${s.isDone ? 'x' : ' '}] ${s.text}`))
+  if (card.options.length > 0) lines.push('', card.pick === null ? `Decide: ${card.options.join(' / ')}` : `Decided: ${card.pick}`)
+  if (card.reviews.length > 0) lines.push('', '### Files', '', ...card.reviews.map(path => `- \`${path}\``))
+  if (card.links.length > 0) lines.push('', '### Links', '', ...card.links.map(link => `- [${link.label}](${link.url})`))
+  if (card.runs.length > 0) lines.push('', '### Commands', '', '```' + language, ...card.runs, '```')
+
+  return lines.join('\n')
+}
+
+const MARKDOWN_SAID = { copied: 'Copied the card as Markdown.', failed: 'Could not reach the clipboard here.' }
 
 async function save($: Engine) {
   const id = await $.session.id()
@@ -539,6 +565,14 @@ async function save($: Engine) {
   const kept: Saved = Object.fromEntries(Object.entries(all).filter(([, v]) => now - v.at < KEEP_MS))
   kept[id] = { items: await read($, items), seq: await read($, seq), at: now }
   await $.store.set(SAVED, kept)
+}
+
+// Opens the pane without being asked. Claude Code may hold it back (a narrow window, a surface with no room);
+// the reason is kept for /handoffs and the debug log.
+async function placePane($: Engine) {
+  const opened = await $.ui.open({ id: PANE, title: TITLE })
+  unplaced = opened.isPlaced ? undefined : opened.reason
+  if (unplaced !== undefined) $.ui.log(`handoffs: the pane did not open on its own: ${unplaced}`, { to: 'debug' })
 }
 
 // Turns the blocks of one reply message into cards, skipping blocks already read.
@@ -555,7 +589,7 @@ async function take($: Engine, text: string) {
   await update($, seq, () => result.next)
   await save($)
   if (result.added.length > 0) {
-    await $.ui.open({ id: PANE, title: TITLE })
+    await placePane($)
     $.ui.toast(result.added.length === 1 ? `Handoff: ${result.added[0]?.title}` : `${result.added.length} new handoffs`)
   }
 }
@@ -634,6 +668,8 @@ export const register: Register = on => {
         await update($, seq, () => mine.seq)
       }
     }
+    // Cards still open from before put the pane back up, as a card arriving would.
+    if ((await read($, items)).some(card => card.status === 'open')) await placePane($)
     // A reload (an edit to this mod) redraws the pane and band at once, not only at the next change.
     $.ui.invalidate('ui.render')
     // Under the auto theme, a change of the system's light or dark setting redraws the pane within a few seconds.
@@ -654,7 +690,9 @@ export const register: Register = on => {
     const opened = open === 0 ? 'Handoffs pane opened. Nothing is waiting on you.' : `Handoffs pane opened: ${open} waiting on you.`
 
     const news = notes.unread === undefined ? [] : [`Handoffs updated to ${notes.unread}.`, WHATS_NEW[notes.unread] ?? '', `What changed: ${CHANGELOG}`]
-    const said = [opened, ...(e.presentation?.isFullscreen === false ? [FULLSCREEN_HINT] : []), ...notices(), deliveryNote(), ...news]
+    const why = unplaced === undefined ? [] : [`The pane could not open on its own: ${unplaced}`]
+    unplaced = undefined
+    const said = [opened, ...why, ...(e.presentation?.isFullscreen === false ? [FULLSCREEN_HINT] : []), ...notices(), deliveryNote(), ...news]
 
     return { text: said.filter(line => line !== '').join(' ') }
   })
@@ -846,7 +884,11 @@ export const register: Register = on => {
         <Box key={`card-${card.id}`} flexDirection="column" rowGap='md' paddingX='md' paddingY='md' backgroundColor={A.card} borderStyle="round" borderColor={A.outline}>
           <Box flexDirection="row" justifyContent="space-between" alignItems="center">
             <Text {...face({ mono: true, size: 'footnote' })} color={INK}>{card.id.toUpperCase()} · {age(card.createdAt, now)}</Text>
-            <Button key={`close-${card.id}`} plain dimColor label="✕" onPress={() => void closeCard($, card.id)} />
+            <Box flexDirection="row" alignItems="center" gap='md'>
+              <Button key={`md-${card.id}`} plain dimColor label="Copy as Markdown"
+                onPress={press => void copy($, toMarkdown(card, paste.language), press.surface, MARKDOWN_SAID)} />
+              <Button key={`close-${card.id}`} plain dimColor label="✕" onPress={() => void closeCard($, card.id)} />
+            </Box>
           </Box>
           <Text {...face({ size: 'title', weight: 'bold' })} color={A.steel}>{card.title}</Text>
 
@@ -931,11 +973,18 @@ export const register: Register = on => {
               {label('Run', system === 'wsl' || system === 'windows' ? `in ${paste.where.replace(/^your /, '')}` : undefined)}
               {card.runs.map((command, i) => (
                 <Box key={`run-${card.id}-${i}`} flexDirection="column" rowGap='sm'>
-                  <Code source={forShell(command, system)} language={paste.language} />
+                  <Code source={command} language={paste.language} />
                   <Box flexDirection="row">
-                    <Button key={`copy-${card.id}-${i}`} label="Copy" onPress={press => void copy($, forShell(command, system), press.surface)}>
-                      {brass('Copy')}
-                    </Button>
+                    <Box flexDirection="row" gap='md'>
+                      <Button key={`copy-${card.id}-${i}`} label="Copy" onPress={press => void copy($, command, press.surface)}>
+                        {brass('Copy')}
+                      </Button>
+                      {system !== 'windows' && (
+                        <Button key={`claude-${card.id}-${i}`} label="Run in Claude" onPress={() => void runInClaude($, command)}>
+                          {brass('Run in Claude')}
+                        </Button>
+                      )}
+                    </Box>
                   </Box>
                 </Box>
               ))}
