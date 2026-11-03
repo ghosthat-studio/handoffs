@@ -11,7 +11,7 @@ Each card shows what Claude needs and why, with:
 - **Steps** to tick off as you do them
 - **Decision buttons** when there's a choice to make
 - **Open buttons** for the files and web pages to look at
-- **Copy and Run in Claude buttons** for commands you need to run yourself: Copy for your own terminal, Run in Claude to put the command in your prompt after a `!`
+- **Copy buttons** for commands you need to run yourself
 - **Copy as Markdown** on each card, ready to paste into a pull request, an issue or a doc
 
 A **Waiting on you** band sits above the prompt while any card is open. **Send** passes your ticks and your pick back, and Claude carries on. On a card that's just a choice, picking an option sends it. **✕** closes a card. Anything you tick reaches Claude with your next message, even if you don't send it.
@@ -101,8 +101,7 @@ The mod starts programs only to open files and links, copy commands, match your 
   - Linux: `xdg-open`
   - Windows and WSL: `explorer.exe`, plus `powershell.exe -NoProfile -NonInteractive` running `Start-Process` for text files (the file type's Edit action, or Notepad) and for showing a file in its folder. The path reaches PowerShell on standard input. In WSL, `wslpath -w` turns the path into a Windows one first.
   - A card's paths come from Claude's reply, so Open never runs a program. Documents, images and media open in their usual app, and code and other text files open in a text editor. App bundles, installers, links and anything unrecognized are shown in their folder instead.
-- **Copy**, only when you click it: `pbcopy` on macOS; `wl-copy`, `xclip` or `xsel` on Linux; `powershell.exe -NoProfile -NonInteractive` running `Set-Clipboard` on Windows and WSL. The command goes to the clipboard on standard input and is never run. The command is copied exactly as written. Copy as Markdown works the same way, with the card's text.
-- **Run in Claude**, only when you click it, and not on Windows: puts `! ( command )` in your prompt, through Claude Code's own prompt API. Nothing runs until you press Enter. The `( … )` keeps a `cd` or `export` from changing Claude's shell for the rest of your session. If you've started typing a message, it's left alone and nothing is put in.
+- **Copy**, only when you click it: `pbcopy` on macOS; `wl-copy`, `xclip` or `xsel` on Linux; `powershell.exe -NoProfile -NonInteractive` running `Set-Clipboard` on Windows and WSL. The command goes to the clipboard on standard input and is never run. On macOS, Linux and WSL, a command that would change your shell's folder or environment is copied wrapped in `( … )`, so pasting it into Claude's shared shell doesn't change the rest of your session. PowerShell has no such wrapper, so on Windows the command is copied as written. Copy as Markdown copies the card's text the same way.
 - **Light or dark mode**, only when the theme is Auto: once when the pane first draws, then every 4 seconds to notice a change. It runs one of these, which reads a single display setting and nothing else:
   - macOS: `defaults read -g AppleInterfaceStyle`
   - Linux: `gsettings get org.gnome.desktop.interface color-scheme`

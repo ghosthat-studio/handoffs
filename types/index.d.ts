@@ -22,7 +22,7 @@ export type Handoff = {
   reviews: string[]
   /** Web pages: `link:` lines, `review:` lines that are URLs, and URLs inside the card's text. */
   links: Link[]
-  /** Shell commands for the person to run, each with a Copy button. */
+  /** Shell commands for the person to run, each with Copy and Run in Claude buttons. */
   runs: string[]
   /** The session's working directory when the card arrived, for relative review paths. */
   root: string

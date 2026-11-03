@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Handoff } from '../types'
 
-import { apply, forClaude, openArgv, openHow, openList, openRun, parseAnswer, pasteInto, shellNote, toMarkdown } from '../hooks/register.tsx'
+import { apply, forShell, openArgv, openHow, openList, openRun, parseAnswer, pasteInto, shellNote, toMarkdown } from '../hooks/register.tsx'
 
 // The Mac's light or dark setting, as `defaults read -g AppleInterfaceStyle` reports it: '' in light mode.
 const system = { style: '' }
@@ -28,13 +28,6 @@ function engine(on: On, version = '2.1.299', stored: Record<string, unknown> = {
   const clock = mock.clock(on, { now: Date.parse('2026-10-15T20:00:00Z') })
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('session.root', () => ({ value: '/work/project' }))
-  // The prompt box: what the person has typed, and what the mod put there.
-  const box = { text: '' }
-  on('prompt.read', () => ({ value: { text: box.text, cursor: box.text.length } }))
-  on('prompt.fill', ($, e) => {
-    box.text = e.text
-    return { isFilled: true }
-  })
   const opens: string[] = []
   on('ui.open', ($, e) => {
     opens.push(e.id)
@@ -47,7 +40,7 @@ function engine(on: On, version = '2.1.299', stored: Record<string, unknown> = {
     return <Text>{e.component === 'AssistantMessage' ? e.props.text : ''}</Text>
   })
 
-  return { ran, clock, opens, box }
+  return { ran, clock, opens }
 }
 
 const PANE = {
@@ -347,36 +340,7 @@ test('links get Open buttons and commands get a Copy button', async ($, on) => {
 
   await pane.press({ key: 'copy-h1-0' })
   const copied = ran.find(r => r.argv[0] === 'pbcopy')
-  // Copied exactly as Claude wrote it, with no ( … ) around it.
-  expect(copied?.stdin).toBe('cd /home/me/project && npm run deploy')
-  expect(await pane.find({ type: 'Code', text: /^\(/ })).toBeUndefined()
-})
-
-test('Run in Claude puts the command in the prompt after a !, inside one subshell', async ($, on) => {
-  const { box, ran } = engine(on)
-  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
-  await $.turn.complete(finish(LINKED))
-  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
-
-  // A draft the person is writing is never thrown away.
-  box.text = 'half a thought'
-  await pane.press({ key: 'claude-h1-0' })
-  expect(box.text).toBe('half a thought')
-
-  box.text = ''
-  await pane.press({ key: 'claude-h1-0' })
-  expect(box.text).toBe('! ( cd /home/me/project && npm run deploy )')
-  // Copy, for the person's own terminal, still takes it as written.
-  await pane.press({ key: 'copy-h1-0' })
-  expect(ran.find(r => r.argv[0] === 'pbcopy')?.stdin).toBe('cd /home/me/project && npm run deploy')
-})
-
-test('a command for Claude’s shell is wrapped once, whatever it holds', () => {
-  expect(forClaude('cd /abs && make')).toBe('! ( cd /abs && make )')
-  expect(forClaude('npm test')).toBe('! ( npm test )')
-  expect(forClaude('(cd /a && make)')).toBe('! (cd /a && make)')
-  // Two subshells side by side are not one: the cd between them would still stick.
-  expect(forClaude('(make a) && cd /b && (make c)')).toBe('! ( (make a) && cd /b && (make c) )')
+  expect(copied?.stdin).toBe('( cd /home/me/project && npm run deploy )')
 })
 
 test('a card copies as Markdown, ready to paste into a pull request', async ($, on) => {
@@ -551,7 +515,23 @@ test('the open-card list names each card, its steps and its decision, and asks C
   expect(text).toContain('Decision: not made yet (Go / Wait)')
 })
 
+test('a command that would move the shared shell is copied inside a subshell; others are left as they are', () => {
+  expect(forShell('cd /abs/cms/studio && npm run deploy')).toBe('( cd /abs/cms/studio && npm run deploy )')
+  expect(forShell('export NODE_ENV=production; npm run build')).toBe('( export NODE_ENV=production; npm run build )')
+  expect(forShell('source .venv/bin/activate && pytest')).toBe('( source .venv/bin/activate && pytest )')
+  expect(forShell('( cd /abs/cms/studio && npm run deploy )')).toBe('( cd /abs/cms/studio && npm run deploy )')
+  expect(forShell('(cd /a && make)')).toBe('(cd /a && make)')
+  // Two subshells side by side are not one wrap: the cd between them would still stick.
+  expect(forShell('(make a) && cd /b && (make c)')).toBe('( (make a) && cd /b && (make c) )')
+  expect(forShell('gh pr merge 22 --squash')).toBe('gh pr merge 22 --squash')
+  expect(forShell('npm run abcd')).toBe('npm run abcd')
+})
+
 test('run lines follow the shell they are pasted into', () => {
+  // PowerShell has no ( … ) subshell, so a Windows command is copied as written.
+  expect(forShell('Set-Location C:\\proj; npm run deploy', 'windows')).toBe('Set-Location C:\\proj; npm run deploy')
+  expect(forShell('cd /abs && make', 'windows')).toBe('cd /abs && make')
+  expect(forShell('cd /abs && make', 'wsl')).toBe('( cd /abs && make )')
   expect(pasteInto('windows')).toEqual({ where: 'PowerShell', language: 'powershell' })
   expect(pasteInto('wsl', 'Ubuntu').where).toBe('your Ubuntu terminal')
   expect(pasteInto('wsl').where).toBe('your WSL terminal')

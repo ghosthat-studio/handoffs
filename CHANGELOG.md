@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 (2026-11-03)
+
+- Run lines are back to how 1.1.3 had them. A command with `cd` or `export` is shown and copied inside `( … )`, so it runs the same whether you paste it into your own terminal or after `!` in Claude's prompt, and a `cd` can't move Claude's shell for the rest of the session. In 1.2.0 the brackets were dropped, which broke the `!` case.
+- Removed: the Run in Claude button from 1.2.0. A `!` the mod puts in your prompt doesn't switch on Claude Code's shell mode, so it never ran anything. And run lines are for commands you need to run yourself, so Copy is the right button for them.
+- When Claude runs a card's command itself, it now runs it inside `( … )`, so a `cd` in the command can't move its working folder.
+
 ## 1.2.0 (2026-11-03)
 
 - Copy now takes a command exactly as Claude wrote it, for pasting into your own terminal. A command with `cd` or `export` used to be wrapped in `( … )`, which most people deleted before running it.

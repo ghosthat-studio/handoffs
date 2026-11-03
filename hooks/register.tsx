@@ -94,7 +94,7 @@ link: Pull request 22 | https://github.com/owner/repo/pull/22
 run: cd /absolute/path/to/project && npm run deploy
 \`\`\`
 
-Only \`need\` is required. Use \`decide\` when there is a choice: each option becomes a button. Use one \`review\` line per local file they should open, absolute or relative to the working directory. Use one \`link\` line per web page (a label, a bar, then the URL), each of which becomes an Open button; a URL written anywhere else on the card gets an Open button too. Use one \`run\` line per shell command they need to run themselves; each gets a Copy button. Write each command so it runs from any folder: use absolute paths, and \`cd\` with an absolute path when it must run somewhere in particular. Do not put links or commands inside \`step\` text when a \`link\` or \`run\` line will do. Write one block per request. Keep the reply's own prose as usual; the block is shown in the transcript as a one-line pointer to its card, so do not leave anything in it that the prose needs.
+Only \`need\` is required. Use \`decide\` when there is a choice: each option becomes a button. Use one \`review\` line per local file they should open, absolute or relative to the working directory. Use one \`link\` line per web page (a label, a bar, then the URL), each of which becomes an Open button; a URL written anywhere else on the card gets an Open button too. Use one \`run\` line per shell command they need to run themselves; each gets a Copy button. Write each command so it runs from any folder: use absolute paths, and \`cd\` with an absolute path when it must run somewhere in particular. If you run a card's command yourself, run it inside \`( … )\` so its \`cd\` doesn't move your shell. Do not put links or commands inside \`step\` text when a \`link\` or \`run\` line will do. Write one block per request. Keep the reply's own prose as usual; the block is shown in the transcript as a one-line pointer to its card, so do not leave anything in it that the prose needs.
 
 Cards are numbered h1, h2, ... When the person sends a card back you get a message headed \`Handoff h2 (title)\` with the steps they ticked and the option they picked. To change a card that is still open, write the whole card again with its \`id: h2\`: the new block replaces the card, so leave out a line to remove it. Steps whose text you keep stay ticked; write \`step: [x] text\` to tick one yourself. To close a card that no longer stands, write a block holding only \`close: h2\`.
 
@@ -330,7 +330,8 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
-  '1.2.0': 'Copy now takes a command exactly as written, and Run in Claude puts it in your prompt to run with !. Each card also has Copy as Markdown, for a pull request or an issue.',
+  '1.2.1': 'Commands with cd or export are back inside ( … ), so they run the same in your terminal or after ! in Claude’s prompt. The Run in Claude button is gone; Copy covers both.',
+  '1.2.0': 'Each card has Copy as Markdown, for a pull request or an issue, and a resumed session with cards waiting opens the pane.',
   '1.1.3': 'When Claude asks you something in its own question box, the band and this pane now say so until you answer.',
   '1.1.2': 'In Claude Desktop, VS Code and the mobile app, the pane now follows the app’s light or dark mode.',
   '1.1.1': 'Open on a link works again on a Mac. If Open ever fails, the message now says why.',
@@ -490,19 +491,12 @@ const isWrapped = (command: string) => {
   return depth === 0
 }
 
-// A run line for Claude's own shell, after a ! in the prompt. Copy gives the command as written, for the person's
-// terminal; here it goes inside one subshell, so a cd or export doesn't move Claude's shell for the rest of the
-// session, and the whole line runs as one command (Claude Desktop's ! stops at a bare &&).
-export const forClaude = (command: string) => `! ${isWrapped(command) ? command.trim() : `( ${command.trim()} )`}`
-
-async function runInClaude($: Engine, command: string) {
-  if ((await $.prompt.read()).text.trim() !== '') {
-    $.ui.toast('Your prompt has a draft in it. Send or clear it, then press Run in Claude again.')
-    return
-  }
-  const filled = await $.prompt.fill({ text: forClaude(command) }).catch(() => ({ isFilled: false }))
-  $.ui.toast(filled.isFilled ? 'The command is in your prompt. Press Enter to run it.' : 'Could not reach the prompt here; use Copy instead.')
-}
+// A pasted command runs in Claude's shared shell (! in the prompt), where a cd, export or source would stick
+// for the rest of the session. Such a command is copied inside a subshell; one already wrapped is left alone.
+const STICKY = /(^|[;&|(]\s*|\s)(cd|pushd|popd|export|unset|source|alias)(\s|$)|(^|[;&|]\s*)\.\s/
+// On Windows a command is written for PowerShell, which has no ( … ) subshell, so it is copied as written.
+export const forShell = (command: string, os?: Platform) =>
+  os === 'windows' || isWrapped(command) || !STICKY.test(command) ? command : `( ${command.trim()} )`
 
 // Where the person pastes a run line. On Windows that is PowerShell, the terminal's default; under WSL it is the
 // distro's own shell, since a WSL command means nothing to PowerShell.
@@ -973,18 +967,11 @@ export const register: Register = on => {
               {label('Run', system === 'wsl' || system === 'windows' ? `in ${paste.where.replace(/^your /, '')}` : undefined)}
               {card.runs.map((command, i) => (
                 <Box key={`run-${card.id}-${i}`} flexDirection="column" rowGap='sm'>
-                  <Code source={command} language={paste.language} />
+                  <Code source={forShell(command, system)} language={paste.language} />
                   <Box flexDirection="row">
-                    <Box flexDirection="row" gap='md'>
-                      <Button key={`copy-${card.id}-${i}`} label="Copy" onPress={press => void copy($, command, press.surface)}>
-                        {brass('Copy')}
-                      </Button>
-                      {system !== 'windows' && (
-                        <Button key={`claude-${card.id}-${i}`} label="Run in Claude" onPress={() => void runInClaude($, command)}>
-                          {brass('Run in Claude')}
-                        </Button>
-                      )}
-                    </Box>
+                    <Button key={`copy-${card.id}-${i}`} label="Copy" onPress={press => void copy($, forShell(command, system), press.surface)}>
+                      {brass('Copy')}
+                    </Button>
                   </Box>
                 </Box>
               ))}
