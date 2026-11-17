@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2 (2026-11-17)
+
+- Fixed: in long sessions, every choice on a card could end up in one button, such as "Keep it, delete it, or ask first". Claude Code shortens old messages as a session grows. Where Handoffs teaches Claude the card format with your messages instead of its system prompt (when another plugin skips that step), only a short reminder was left after the shortening, and it didn't say to separate choices with a bar. It does now, so each choice gets its own button however long the session runs.
+
 ## 1.2.1 (2026-11-03)
 
 - Run lines are back to how 1.1.3 had them. A command with `cd` or `export` is shown and copied inside `( … )`, so it runs the same whether you paste it into your own terminal or after `!` in Claude's prompt, and a `cd` can't move Claude's shell for the rest of the session. In 1.2.0 the brackets were dropped, which broke the `!` case.

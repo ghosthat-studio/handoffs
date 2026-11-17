@@ -722,6 +722,8 @@ test('when another plugin skips both prompt hooks, the format goes with the next
   const later = await typed($, 'and the other one', sent)
   expect(hasFormat(later)).toBe(false)
   expect(hasReminder(later)).toBe(true)
+  // The reminder alone must still teach the bar between choices, or a long session writes them as one button.
+  expect(later.find(text => text.startsWith('Handoffs: when your reply ends'))).toMatch(/decide: \w+ \| \w+/)
 
   // The next session on this machine sends the format with its very first message.
   await $.session.start({ source: 'startup', cwd: '/work/project' } as never)

@@ -104,7 +104,7 @@ A reply that ends by asking whether to go ahead, or which way to go, is waiting 
 
 // The format's gist, with each later message when the format itself went with a message: it keeps its weight
 // there, and it outlasts a compaction that drops the message the format came with.
-const REMINDER = 'Handoffs: when your reply ends waiting on the person to do or decide something, including asking whether to go ahead, end it with a `handoff` block (title, need, why, step, decide, review, link and run lines; `id: h2` to rewrite an open card, `close: h2` to close one).'
+const REMINDER = 'Handoffs: when your reply ends waiting on the person to do or decide something, including asking whether to go ahead, end it with a `handoff` block (title, need, why, step, decide, review, link and run lines, one field per line; `decide: First | Second | Third` gives each choice its own button, so separate choices with a bar, never commas or "or"; `id: h2` to rewrite an open card, `close: h2` to close one).'
 
 type Parsed = {
   id?: string
@@ -330,6 +330,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.2': 'In long sessions, each choice on a card gets its own button again, instead of all of them landing in one.',
   '1.2.1': 'Commands with cd or export are back inside ( … ), so they run the same in your terminal or after ! in Claude’s prompt. The Run in Claude button is gone; Copy covers both.',
   '1.2.0': 'Each card has Copy as Markdown, for a pull request or an issue, and a resumed session with cards waiting opens the pane.',
   '1.1.3': 'When Claude asks you something in its own question box, the band and this pane now say so until you answer.',
