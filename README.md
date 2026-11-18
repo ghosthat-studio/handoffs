@@ -80,7 +80,7 @@ The pane follows Claude Code's theme. Pick one with `/theme`:
 
 The Waiting on you band sits on your terminal's own background, so its text always uses your terminal's text colour. If your terminal is light but the theme is Dark (or the other way round), the pane and Claude Code's own colours won't match your terminal. Set the theme to Auto or to the one that matches.
 
-## Using it
+## Usage
 
 You don't need to do anything to turn it on. The mod teaches Claude a short `handoff` block format, and Claude ends a reply with one whenever it's waiting on you. The block shows in the transcript as a one-line pointer, and the card opens in the pane.
 
