@@ -1,5 +1,7 @@
 # Handoffs
 
+[![Listed on ClaudePluginHub](https://www.claudepluginhub.com/badge/ghosthat-studio-handoffs)](https://www.claudepluginhub.com/plugins/ghosthat-studio-handoffs?ref=badge)
+
 A mod for Claude Code. When Claude needs you to do or decide something, the request becomes a card in a Handoffs pane, so it doesn't scroll away while you're busy elsewhere.
 
 [![Claude Code with the Handoffs pane open: two cards waiting, one with both steps ticked, an option picked and a Send and close button](docs/handoffs-pane.png)](https://ghosthatstudio.com/toolbox/handoffs/)
@@ -78,7 +80,7 @@ The pane follows Claude Code's theme. Pick one with `/theme`:
 
 The Waiting on you band sits on your terminal's own background, so its text always uses your terminal's text colour. If your terminal is light but the theme is Dark (or the other way round), the pane and Claude Code's own colours won't match your terminal. Set the theme to Auto or to the one that matches.
 
-## Using it
+## Usage
 
 You don't need to do anything to turn it on. The mod teaches Claude a short `handoff` block format, and Claude ends a reply with one whenever it's waiting on you. The block shows in the transcript as a one-line pointer, and the card opens in the pane.
 
