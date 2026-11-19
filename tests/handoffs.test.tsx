@@ -893,3 +893,25 @@ test('light and dark: no surface ever draws the pane’s text on a ground it was
   await asked
   system.style = ''
 })
+
+test('after a /clear, the next message carries the whole format again', async ($, on) => {
+  engine(on)
+  const sent: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.context)
+    return { text: e.text }
+  })
+  on('session.end', ($, e) => ({ sessionId: e.sessionId }) as never)
+  const hasFormat = (context: readonly string[]) => context.some(text => text.includes('```handoff'))
+
+  // sec-default passes both prompt hooks over, so the format goes with a message.
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await typed($, 'Fix the tests', sent)
+  await $.turn.complete(finish('Two tests fail. Want me to look?'))
+  expect(hasFormat(await typed($, 'yes', sent))).toBe(true)
+  expect(hasFormat(await typed($, 'and the other one', sent))).toBe(false)
+
+  // /clear: a new conversation in the same process, and no session.start.
+  await $.session.end({ reason: 'clear', sessionId: 's1' } as never)
+  expect(hasFormat(await typed($, 'New topic', sent))).toBe(true)
+})

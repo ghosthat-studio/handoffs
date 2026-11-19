@@ -330,6 +330,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.3': 'After /clear, Claude gets the whole card format again, so cards keep coming where another plugin skips the usual way.',
   '1.2.2': 'In long sessions, each choice on a card gets its own button again, instead of all of them landing in one.',
   '1.2.1': 'Commands with cd or export are back inside ( … ), so they run the same in your terminal or after ! in Claude’s prompt. The Run in Claude button is gone; Copy covers both.',
   '1.2.0': 'Each card has Copy as Markdown, for a pull request or an issue, and a resumed session with cards waiting opens the pane.',
@@ -678,6 +679,19 @@ export const register: Register = on => {
 
     return next(e)
   })
+
+  // A /clear starts a new conversation in the same process. Current builds fire no session.start for it (the
+  // check above is for builds that did), so the new conversation has never seen the format: forget how it was
+  // given, and the next message carries the whole format again.
+  on('session.end', async ($, e, next) => {
+    const ended = await next(e)
+    if (e.reason === 'clear') {
+      if (delivery === 'submit') delivery = undefined
+      isTurnDone = false
+      $.ui.invalidate('ui.render')
+    }
+    return ended
+  }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'handoffs' }, async ($, e) => {
     await $.ui.open({ id: PANE, title: TITLE })
