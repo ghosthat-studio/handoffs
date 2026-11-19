@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.3 (2026-11-18)
+
+- Fixed: after `/clear`, Claude could stop writing cards where another plugin skips the way Handoffs teaches it the format (Claude Code's own `sec-default`, on Team and Enterprise plans and machines with managed settings). A `/clear` starts a new conversation without a new session start, so Handoffs kept believing the format had already gone, and only the one-line reminder went with each message. Now the next message after a `/clear` carries the whole format again.
+
 ## 1.2.2 (2026-11-17)
 
 - Fixed: in long sessions, every choice on a card could end up in one button, such as "Keep it, delete it, or ask first". Claude Code shortens old messages as a session grows. Where Handoffs teaches Claude the card format with your messages instead of its system prompt (when another plugin skips that step), only a short reminder was left after the shortening, and it didn't say to separate choices with a bar. It does now, so each choice gets its own button however long the session runs.
