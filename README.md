@@ -22,8 +22,15 @@ A **Waiting on you** band sits above the prompt while any card is open. **Send**
 
 Type these as messages in a Claude Code session: in your terminal, or in the Code tab of the Claude Desktop app.
 
+Step 1:
+
 ```
 /plugin marketplace add ghosthat-studio/marketplace
+```
+
+Step 2:
+
+```
 /plugin install handoffs@ghosthat-studio
 ```
 
@@ -40,8 +47,15 @@ Don't add it on the Plugins page under Customize in Claude Desktop or claude.ai.
 
 To get new versions automatically, turn on auto-update for the marketplace: run `/plugin`, open **Marketplaces**, pick **ghosthat-studio**, and choose **Enable auto-update**. Claude Code then fetches updates in the background and tells you when one is ready for `/reload-plugins`. Without it, update by hand:
 
+Step 1:
+
 ```
 /plugin marketplace update ghosthat-studio
+```
+
+Step 2:
+
+```
 /plugin update handoffs@ghosthat-studio
 ```
 
