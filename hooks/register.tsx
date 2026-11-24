@@ -333,6 +333,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.6': 'The Done list has Show less, which goes back to your ten most recent cards.',
   '1.2.5': 'The Done list shows your most recent cards first, ten at a time, with Show more for the rest.',
   '1.2.4': 'Picking an option now always reaches Claude at once, and answering a card’s choice in the chat records it on the card.',
   '1.2.3': 'After /clear, Claude gets the whole card format again, so cards keep coming where another plugin skips the usual way.',
@@ -1098,9 +1099,16 @@ export const register: Register = on => {
                   onPress={() => void setCard($, card.id, c => ({ ...c, status: 'open' }))} />
               </Box>
             ))}
-            {isDoneShown && done.length > doneCount && (
-              <Button key="more-done" plain dimColor label={`Show ${Math.min(DONE_PAGE, done.length - doneCount)} more`}
-                onPress={() => void update($, doneShown, n => n + DONE_PAGE)} />
+            {isDoneShown && (done.length > doneCount || doneCount > DONE_PAGE) && (
+              <Box flexDirection="row" alignItems="center" gap='md'>
+                {done.length > doneCount && (
+                  <Button key="more-done" plain dimColor label={`Show ${Math.min(DONE_PAGE, done.length - doneCount)} more`}
+                    onPress={() => void update($, doneShown, n => n + DONE_PAGE)} />
+                )}
+                {doneCount > DONE_PAGE && (
+                  <Button key="less-done" plain dimColor label="Show less" onPress={() => void update($, doneShown, () => DONE_PAGE)} />
+                )}
+              </Box>
             )}
           </Box>
         )}

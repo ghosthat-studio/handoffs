@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.6 (2026-11-24)
+
+- The Done list has a Show less button once more than ten cards are showing. It goes back to the ten most recent.
+
 ## 1.2.5 (2026-11-24)
 
 - Fixed: the Done list showed finished cards oldest first, all at once, and the pane doesn't scroll, so the most recent ones could sit out of reach below the bottom. It now shows the most recent first, ten at a time, with a Show more button for the rest.
