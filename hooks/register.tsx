@@ -11,6 +11,9 @@ const SELF = 'handoffs'
 const items = atom({ plugin: 'handoffs', key: 'items' } as const, [])
 const seq = atom({ plugin: 'handoffs', key: 'seq' } as const, 1)
 const showDone = atom({ plugin: 'handoffs', key: 'showDone' } as const, false)
+// How many finished cards the Done list shows: the pane doesn't scroll, so the rest come ten at a time.
+const DONE_PAGE = 10
+const doneShown = atom({ plugin: 'handoffs', key: 'doneShown' } as const, DONE_PAGE)
 const seen = atom({ plugin: 'handoffs', key: 'seen' } as const, [])
 
 // Cards are saved per session in the store, so a resumed session gets its cards back; a new session starts empty.
@@ -330,6 +333,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.5': 'The Done list shows your most recent cards first, ten at a time, with Show more for the rest.',
   '1.2.4': 'Picking an option now always reaches Claude at once, and answering a card’s choice in the chat records it on the card.',
   '1.2.3': 'After /clear, Claude gets the whole card format again, so cards keep coming where another plugin skips the usual way.',
   '1.2.2': 'In long sessions, each choice on a card gets its own button again, instead of all of them landing in one.',
@@ -620,6 +624,10 @@ export function answeredBy(text: string, cards: Handoff[]): { card: Handoff; pic
   return undefined
 }
 
+const cardNumber = (card: Handoff) => Number(card.id.replace(/^h/, '')) || 0
+/** Finished cards, the most recent first: card numbers only go up. */
+export const newestFirst = (cards: Handoff[]) => [...cards].sort((a, b) => cardNumber(b) - cardNumber(a))
+
 // Closing a card sends nothing now: Claude hears it was closed, with any ticks, along with the next message.
 async function closeCard($: Engine, id: string) {
   await setCard($, id, card => ({ ...card, status: 'done', isDirty: true }))
@@ -894,6 +902,7 @@ export const register: Register = on => {
     const Svg = 'Svg' in elements ? elements.Svg : undefined
     const list = await read($, items)
     const isDoneShown = await read($, showDone)
+    const doneCount = await read($, doneShown)
     const now = await $.clock.now()
     const open = list.filter(card => card.status === 'open')
     const done = list.filter(card => card.status === 'done')
@@ -1080,7 +1089,7 @@ export const register: Register = on => {
                   onPress={() => void update($, items, l => l.filter(card => card.status !== 'done')).then(() => save($))} />
               )}
             </Box>
-            {isDoneShown && done.map(card => (
+            {isDoneShown && newestFirst(done).slice(0, doneCount).map(card => (
               <Box key={`done-${card.id}`} flexDirection="row" alignItems="center" gap='sm'>
                 <Text {...face({ mono: true })} color={INK}>{card.id.toUpperCase()}</Text>
                 <Text color={DIM_INK} strikethrough wrap="truncate-end">{card.title}</Text>
@@ -1089,6 +1098,10 @@ export const register: Register = on => {
                   onPress={() => void setCard($, card.id, c => ({ ...c, status: 'open' }))} />
               </Box>
             ))}
+            {isDoneShown && done.length > doneCount && (
+              <Button key="more-done" plain dimColor label={`Show ${Math.min(DONE_PAGE, done.length - doneCount)} more`}
+                onPress={() => void update($, doneShown, n => n + DONE_PAGE)} />
+            )}
           </Box>
         )}
       </Box>

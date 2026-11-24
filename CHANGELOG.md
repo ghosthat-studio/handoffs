@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.5 (2026-11-24)
+
+- Fixed: the Done list showed finished cards oldest first, all at once, and the pane doesn't scroll, so the most recent ones could sit out of reach below the bottom. It now shows the most recent first, ten at a time, with a Show more button for the rest.
+
 ## 1.2.4 (2026-11-24)
 
 - Picking an option now always reaches Claude at once. On a card with steps, a pick used to wait for a separate Send press, so it could look as if nothing happened. Your ticks go along with it; the card closes once every step is ticked, and otherwise stays open showing your pick.

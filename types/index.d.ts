@@ -40,6 +40,8 @@ declare module 'claude-code' {
       seq: number
       /** Whether the done cards are listed in the pane. */
       showDone: boolean
+      /** How many finished cards the Done list shows; Show more adds ten. */
+      doneShown: number
       /** Blocks already turned into cards, by their text, so a block read twice makes one card. */
       seen: string[]
     }
