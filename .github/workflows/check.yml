@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install Claude Code
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
@@ -18,3 +20,35 @@ jobs:
         run: claude plugin validate .
       - name: Run the tests
         run: claude plugin test .
+      - name: Test the release-notes check itself
+        run: python3 .github/scripts/test_release_notes.py
+      # A pull request that changes the version must log it: a higher version, its CHANGELOG.md entry
+      # at the top, and its WHATS_NEW line in the pane.
+      - name: Check the release is logged
+        if: github.event_name == 'pull_request'
+        run: python3 .github/scripts/release_notes.py check "origin/${{ github.base_ref }}"
+
+  # After a merge to main passes the check: a version with no tag yet gets its tag and a GitHub
+  # release whose notes are its CHANGELOG.md entry. The marketplace pointer is still its own PR.
+  release:
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and publish the release if this version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already tagged; nothing to release."
+            exit 0
+          fi
+          python3 .github/scripts/release_notes.py notes "$version" > notes.md
+          gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --notes-file notes.md --latest
+          echo "Released v$version at $GITHUB_SHA."
