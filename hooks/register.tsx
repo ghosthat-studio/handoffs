@@ -330,6 +330,7 @@ type Notes = { version?: string; unread?: string; isTipDone?: boolean; isSkipped
 const CHANGELOG = 'https://github.com/ghosthat-studio/handoffs/blob/main/CHANGELOG.md'
 const TIP = 'Get new versions automatically: run /plugin, open Marketplaces, pick ghosthat-studio and choose Enable auto-update.'
 const WHATS_NEW: Record<string, string> = {
+  '1.2.4': 'Picking an option now always reaches Claude at once, and answering a card’s choice in the chat records it on the card.',
   '1.2.3': 'After /clear, Claude gets the whole card format again, so cards keep coming where another plugin skips the usual way.',
   '1.2.2': 'In long sessions, each choice on a card gets its own button again, instead of all of them landing in one.',
   '1.2.1': 'Commands with cd or export are back inside ( … ), so they run the same in your terminal or after ! in Claude’s prompt. The Run in Claude button is gone; Copy covers both.',
@@ -606,6 +607,19 @@ async function send($: Engine, id: string, markDone: boolean) {
   $.ui.toast(markDone ? `${card.id} sent and closed` : `${card.id} sent`)
 }
 
+const plain = (text: string) => text.trim().replace(/[.!\s]+$/, '').replace(/\s+/g, ' ').toLowerCase()
+
+/** The newest open card that has the message as one of its choices, and that choice; a message that only mentions one isn't an answer. */
+export function answeredBy(text: string, cards: Handoff[]): { card: Handoff; pick: string } | undefined {
+  const said = plain(text)
+  if (said === '') return undefined
+  for (const card of [...cards].reverse()) {
+    const pick = card.status === 'open' ? card.options.find(o => plain(o) === said) : undefined
+    if (pick !== undefined) return { card, pick }
+  }
+  return undefined
+}
+
 // Closing a card sends nothing now: Claude hears it was closed, with any ticks, along with the next message.
 async function closeCard($: Engine, id: string) {
   await setCard($, id, card => ({ ...card, status: 'done', isDirty: true }))
@@ -778,9 +792,20 @@ export const register: Register = on => {
     const isOwn = origin.kind === 'plugin' && origin.name === SELF
     const isPersons = !isOwn && origin.kind !== 'task-notification' && origin.kind !== 'scheduled-trigger' && origin.kind !== 'peer'
     if (!isPersons || e.command !== undefined || e.isMeta === true) return next(e)
+    const told: string[] = []
+    // A message that is exactly one of an open card's choices (typed, or a button under Claude's reply) answers
+    // that card: the pick is recorded and the card closes, or stays open showing the pick while steps are unticked.
+    const answer = answeredBy(e.text, await read($, items))
+    if (answer !== undefined) {
+      const { card, pick } = answer
+      const isDone = card.steps.every(s => s.isDone)
+      await update($, items, cards => cards.map(c => c.id === card.id ? { ...c, pick, isDirty: false, status: isDone ? 'done' : c.status } : c))
+      await save($)
+      told.push(`The person's message is their answer to handoff card ${card.id}; the card now shows it.\n\n${report({ ...card, pick }, isDone ? 'done' : 'progress')}`)
+      $.ui.invalidate('ui.render')
+    }
     const list = await read($, items)
     const dirty = list.filter(card => card.isDirty)
-    const told: string[] = []
     if (delivery === undefined && (isTurnDone || notes.isSkipped === true)) {
       told.push(await formatText($))
       delivery = 'submit'
@@ -935,9 +960,8 @@ export const register: Register = on => {
                 {card.options.map(o => (
                   <Button key={`pick-${card.id}-${o}`} label={card.pick === o ? `✓ ${o}` : o}
                     variant={card.pick === o ? 'primary' : 'secondary'}
-                    onPress={() => void (card.steps.length === 0
-                      ? setCard($, card.id, c => ({ ...c, pick: o })).then(() => send($, card.id, true))
-                      : setCard($, card.id, c => ({ ...c, isDirty: true, pick: c.pick === o ? null : o })))}>
+                    onPress={() => void setCard($, card.id, c => ({ ...c, pick: o }))
+                      .then(() => send($, card.id, card.steps.every(s => s.isDone)))}>
                     {card.pick === o ? `✓ ${o}` : brass(o)}
                   </Button>
                 ))}

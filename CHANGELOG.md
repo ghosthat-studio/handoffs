@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.4 (2026-11-24)
+
+- Picking an option now always reaches Claude at once. On a card with steps, a pick used to wait for a separate Send press, so it could look as if nothing happened. Your ticks go along with it; the card closes once every step is ticked, and otherwise stays open showing your pick.
+- Answering in the chat now updates the card. When your message is exactly one of an open card's choices, typed or pressed in the box under Claude's reply, Handoffs records that pick on the card and closes it (or keeps it open showing the pick while steps are unticked). A message that only mentions a choice changes nothing.
+
 ## 1.2.3 (2026-11-18)
 
 - Fixed: after `/clear`, Claude could stop writing cards where another plugin skips the way Handoffs teaches it the format (Claude Code's own `sec-default`, on Team and Enterprise plans and machines with managed settings). A `/clear` starts a new conversation without a new session start, so Handoffs kept believing the format had already gone, and only the one-line reminder went with each message. Now the next message after a `/clear` carries the whole format again.
