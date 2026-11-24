@@ -92,18 +92,17 @@ test('a reply with a handoff block becomes a card the person can tick, pick and 
   // Nothing ticked or picked yet: nothing to send.
   expect(await pane.find({ key: 'send-h1' })).toBeUndefined()
   await pane.press({ key: 'step-h1-0' })
+  expect(sent).toHaveLength(0)
+  // A pick is a decision: it reaches Claude at once, ticks and all, even with a step left to tick.
   await pane.press({ key: 'pick-h1-Server rack' })
   expect((await pane.find({ key: 'pick-h1-Server rack' }))?.props.label).toBe('✓ Server rack')
-  // A card with steps doesn't send on a pick.
-  expect(sent).toHaveLength(0)
-  expect((await pane.find({ key: 'send-h1' }))?.props.label).toBe('Send')
-
-  await pane.press({ key: 'send-h1' })
   expect(sent).toHaveLength(1)
   expect(sent[0]).toContain('Handoff h1 (Pick the 002 thumbnail): progress so far.')
   expect(sent[0]).toContain('- [x] Open both thumbnails')
   expect(sent[0]).toContain('- [ ] Check them at phone size')
   expect(sent[0]).toContain('Decision: Server rack')
+  // With a step still unticked the card stays open, and Send is there for the rest.
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeUndefined()
 
   await pane.press({ key: 'step-h1-1' })
   expect((await pane.find({ key: 'send-h1' }))?.props.label).toBe('Send and close')
@@ -129,6 +128,80 @@ test('a card that is just a choice sends when an option is picked', async ($, on
   expect(sent[0]).toContain('marked done')
   expect(sent[0]).toContain('Decision: SQLite')
   expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+})
+
+test('a pick on a card whose steps are all ticked sends and closes it', async ($, on) => {
+  engine(on)
+  const sent: string[] = []
+  on('prompt.submit', ($, e) => {
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(REPLY))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'desktop', ...PANE })
+  await pane.press({ key: 'step-h1-0' })
+  await pane.press({ key: 'step-h1-1' })
+  expect(sent).toHaveLength(0)
+  await pane.press({ key: 'pick-h1-Lantern' })
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toContain('Handoff h1 (Pick the 002 thumbnail): marked done.')
+  expect(sent[0]).toContain('Decision: Lantern')
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+})
+
+test('an answer typed in the chat that is one of a card\'s choices is recorded on the card and closes it', async ($, on) => {
+  engine(on)
+  const contexts: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    contexts.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\ntitle: Merge and go live?\nneed: Say when.\ndecide: Merge, go live tonight | Merge, restart now | Not yet\n```'))
+
+  await $.prompt.submit({ text: 'merge, restart now', asUser: true, origin: { kind: 'user' } } as never)
+  const told = (contexts[0] ?? []).join('\n')
+  expect(told).toContain('Handoff h1 (Merge and go live?): marked done.')
+  expect(told).toContain('Decision: Merge, restart now')
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /Nothing waiting on you/ })).toBeDefined()
+})
+
+test('a chat answer on a card with steps left records the pick but keeps the card open', async ($, on) => {
+  engine(on)
+  const contexts: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    contexts.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish(REPLY))
+
+  await $.prompt.submit({ text: 'Neither.', asUser: true, origin: { kind: 'user' } } as never)
+  const told = (contexts[0] ?? []).join('\n')
+  expect(told).toContain('Handoff h1 (Pick the 002 thumbnail): progress so far.')
+  expect(told).toContain('Decision: Neither')
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect((await pane.find({ key: 'pick-h1-Neither' }))?.props.label).toBe('✓ Neither')
+})
+
+test('a message that only mentions a choice leaves the card alone', async ($, on) => {
+  engine(on)
+  const contexts: (readonly string[] | undefined)[] = []
+  on('prompt.submit', ($, e) => {
+    contexts.push(e.context)
+    return { text: e.text }
+  })
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  await $.turn.complete(finish('```handoff\ntitle: Pick a database\nneed: Choose one.\ndecide: Postgres | SQLite\n```'))
+
+  await $.prompt.submit({ text: 'why SQLite and not Postgres?', asUser: true, origin: { kind: 'user' } } as never)
+  const told = (contexts[0] ?? []).join('\n')
+  expect(told).not.toContain('marked done')
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  expect(await pane.find({ type: 'Text', text: /Pick a database/ })).toBeDefined()
 })
 
 test('a card with nothing to tick sends and closes', async ($, on) => {
