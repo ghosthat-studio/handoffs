@@ -204,6 +204,27 @@ test('a message that only mentions a choice leaves the card alone', async ($, on
   expect(await pane.find({ type: 'Text', text: /Pick a database/ })).toBeDefined()
 })
 
+test('the Done list shows the newest first, ten at a time, with Show more for the rest', async ($, on) => {
+  engine(on)
+  on('prompt.submit', ($, e) => ({ text: e.text }))
+  await $.session.start({ source: 'startup', cwd: '/work/project' } as never)
+  const blocks = Array.from({ length: 13 }, (_, i) => `\`\`\`handoff\ntitle: Request ${i + 1}\nneed: Do thing ${i + 1}.\n\`\`\``)
+  await $.turn.complete(finish(blocks.join('\n\n')))
+
+  const pane = await $.ui.mount({ plugin: 'handoffs', surface: 'terminal', ...PANE })
+  for (let i = 1; i <= 13; i++) await pane.press({ key: `close-h${i}` })
+  await pane.press({ key: 'toggle-done' })
+
+  const shown = async () => (await pane.findAll({ type: 'Box' }))
+    .map(b => String(b.key ?? '')).filter(k => k.startsWith('done-h')).map(k => k.slice(5))
+  expect(await shown()).toEqual(['h13', 'h12', 'h11', 'h10', 'h9', 'h8', 'h7', 'h6', 'h5', 'h4'])
+  expect((await pane.find({ key: 'more-done' }))?.props.label).toBe('Show 3 more')
+
+  await pane.press({ key: 'more-done' })
+  expect(await shown()).toEqual(['h13', 'h12', 'h11', 'h10', 'h9', 'h8', 'h7', 'h6', 'h5', 'h4', 'h3', 'h2', 'h1'])
+  expect(await pane.find({ key: 'more-done' })).toBeUndefined()
+})
+
 test('a card with nothing to tick sends and closes', async ($, on) => {
   engine(on)
   on('prompt.submit', ($, e) => ({ text: e.text }))
