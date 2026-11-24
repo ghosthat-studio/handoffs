@@ -220,9 +220,19 @@ test('the Done list shows the newest first, ten at a time, with Show more for th
   expect(await shown()).toEqual(['h13', 'h12', 'h11', 'h10', 'h9', 'h8', 'h7', 'h6', 'h5', 'h4'])
   expect((await pane.find({ key: 'more-done' }))?.props.label).toBe('Show 3 more')
 
+  // Only ten showing: nothing to shrink.
+  expect(await pane.find({ key: 'less-done' })).toBeUndefined()
+
   await pane.press({ key: 'more-done' })
   expect(await shown()).toEqual(['h13', 'h12', 'h11', 'h10', 'h9', 'h8', 'h7', 'h6', 'h5', 'h4', 'h3', 'h2', 'h1'])
   expect(await pane.find({ key: 'more-done' })).toBeUndefined()
+
+  // Show less goes back to the newest ten.
+  expect((await pane.find({ key: 'less-done' }))?.props.label).toBe('Show less')
+  await pane.press({ key: 'less-done' })
+  expect(await shown()).toEqual(['h13', 'h12', 'h11', 'h10', 'h9', 'h8', 'h7', 'h6', 'h5', 'h4'])
+  expect((await pane.find({ key: 'more-done' }))?.props.label).toBe('Show 3 more')
+  expect(await pane.find({ key: 'less-done' })).toBeUndefined()
 })
 
 test('a card with nothing to tick sends and closes', async ($, on) => {
